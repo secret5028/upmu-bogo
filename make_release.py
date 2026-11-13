@@ -9,6 +9,9 @@ FILES=['README.md','THIRD_PARTY.md','.gitignore','requirements.txt','package.jso
        'app/server.py','app/corpus.py','app/start.ps1','engine/report_loop.py',
        'assets/approved.hwpx','defaults/report-header.json','tests/test_corpus.py','tests/test_distribution.py','tests/test_installer.py']
 FILES += ['app/static/'+name for name in ['index.html','app.js','style.css','report-icon.svg','report-icon.ico']]
+FILES += ['examples/README.md'] + ['examples/'+stem+ext
+          for stem in ['01_회의참석보고','02_현장조사결과보고']
+          for ext in ['.hwpx','.txt','.svg']]
 
 def main():
     missing=[name for name in FILES if not (ROOT/name).is_file()]
