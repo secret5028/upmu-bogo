@@ -11,3 +11,5 @@ __pycache__/
 .env.*
 *.lnk
 /dist/
+/build/
+/build-downloads/

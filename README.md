@@ -2,17 +2,25 @@
 
 Windows에서 기존 업무보고를 참고해 AI와 초안을 작성하고, 고정 양식의 HWPX로 저장하는 로컬 웹앱입니다.
 
-**[설치용 ZIP 다운로드](https://github.com/secret5028/upmu-bogo/releases/latest/download/work-report-workspace-0.1.0.zip)** · [릴리스 및 변경사항](https://github.com/secret5028/upmu-bogo/releases)
+**[Windows 설치파일 다운로드](https://github.com/secret5028/upmu-bogo/releases/latest/download/UpmuBogo-Setup-0.2.0-x64.exe)** · [릴리스 및 변경사항](https://github.com/secret5028/upmu-bogo/releases)
 
 ## 다운로드 및 설치
 
-1. 위 **설치용 ZIP 다운로드** 또는 GitHub의 **Code → Download ZIP**으로 내려받아 압축을 해제합니다.
-2. [Python 3.11 이상](https://www.python.org/downloads/windows/)과 [Node.js 20 이상](https://nodejs.org/)을 설치합니다. Python 설치 시 PATH 등록을 선택하세요.
-3. 압축을 푼 폴더의 **install.cmd**를 더블클릭합니다. 최초 설치에는 인터넷이 필요하며 Python 패키지와 kordoc을 내려받습니다.
-4. 설치 후 바탕화면의 **업무보고 작업실** 아이콘을 실행합니다. 크롬이 있으면 크롬으로, 없으면 기본 브라우저로 열립니다.
-5. **양식 수정**에서 직책·이름·연락처를 입력하고 AI를 연결합니다.
+1. 위 **Windows 설치파일 다운로드**를 눌러 EXE 하나를 받습니다.
+2. `UpmuBogo-Setup-0.2.0-x64.exe`를 실행하고 설치를 진행합니다.
+3. 바탕화면의 **업무보고 작업실** 아이콘을 실행합니다.
+4. **양식 수정**에서 보고자 정보를 입력하고 원하는 AI를 연결합니다.
 
-현재 배포본은 설치 스크립트가 포함된 소스 배포본이며, Python/Node.js가 포함된 단일 EXE가 아닙니다. 설치 폴더는 쓰기 가능한 개인 폴더를 사용하세요. 다른 설치본이 8765 포트를 사용하면 중복 실행하지 않고 안내합니다. Windows 전체 기본 브라우저 설정은 바꾸지 않습니다.
+**Python과 Node.js를 따로 설치할 필요가 없습니다.** 필요한 런타임과 문서 처리 라이브러리가 포함되어 설치 중 추가 다운로드도 없습니다. Windows 10/11 64비트용이며 관리자 권한 없이 현재 사용자에게 설치합니다. 크롬이 있으면 크롬으로, 없으면 기본 브라우저로 열립니다. AI 계정/API 연결은 별도로 설정합니다. 이 배포 EXE에는 공인 코드서명이 적용되지 않았습니다.
+
+기본 프로그램 위치: `%LOCALAPPDATA%\Programs\UpmuBogo`  
+보고서·설정 위치: `%LOCALAPPDATA%\UpmuBogo\data`
+
+프로그램 제거 시 보고서와 설정은 별도 데이터 폴더에 남습니다. 이전 바탕화면 프로젝트의 자료는 자동 이전하지 않으며 참조 폴더에서 지정할 수 있습니다. 8765~8784 중 사용 가능한 로컬 포트를 사용합니다. 브라우저를 닫아도 백그라운드 서버는 유지되며 Windows 재시작 시 종료됩니다.
+
+### 소스 코드로 설치하는 경우
+
+개발자가 Code → Download ZIP으로 소스를 받은 경우에는 Python 3.11 이상과 Node.js 20 이상을 설치한 뒤 `install.cmd`를 실행합니다. 일반 사용자는 위 EXE 설치파일을 사용하세요.
 
 ## 사용 순서
 
@@ -35,7 +43,7 @@ Windows에서 기존 업무보고를 참고해 AI와 초안을 작성하고, 고
 
 ## 데이터와 양식
 
-- 모든 개인 데이터는 `data/` 아래에 생성되며 Git에서 제외됩니다.
+- EXE 설치본의 개인 데이터는 `%LOCALAPPDATA%\UpmuBogo\data` 아래에 생성됩니다. 소스 설치본에서는 설치 폴더의 `data/`를 사용하며 Git에서 제외됩니다.
 - 완성본: `data/70_완성문서`
 - 기존 보고서 기본 폴더: `data/자료/기존 업무보고`
 - 실제 파싱 결과, 코퍼스, 설정, 대화: `data/99_시스템`
@@ -44,7 +52,7 @@ Windows에서 기존 업무보고를 참고해 AI와 초안을 작성하고, 고
 - HWP/HWPX/DOCX/PDF/TXT/MD 코퍼스를 지원합니다. HWP는 kordoc으로 읽습니다. HWPX에서 글꼴·간격도 추출합니다. 스캔 PDF/OCR과 일반 이미지의 내용 인식은 이 앱에 포함하지 않습니다.
 - 미리보기는 kordoc 렌더링입니다. 실제 한글의 글꼴 설치 상태에 따라 모양·줄바꿈이 달라질 수 있으므로 최종 문서는 한글에서도 확인하세요. 글꼴 파일은 배포하지 않습니다.
 
-업데이트 전 `data/`를 백업하세요. 설치를 다시 실행해도 개인 설정과 문서는 덮어쓰지 않습니다. 설치 경로를 옮기면 실행환경의 경로를 갱신하기 위해 재설치가 필요합니다. 기존 작성세션은 절대 경로를 포함하므로 그대로 이동 가능한 형식은 아닙니다.
+업데이트 전 `data/`를 백업하세요. 설치를 다시 실행해도 개인 설정과 문서는 덮어쓰지 않습니다. 소스 설치본의 설치 경로를 옮기면 실행환경의 경로를 갱신하기 위해 재설치가 필요합니다. 기존 작성세션은 절대 경로를 포함하므로 그대로 이동 가능한 형식은 아닙니다.
 
 ## 개발 및 검증
 
@@ -60,3 +68,13 @@ Windows에서 기존 업무보고를 참고해 AI와 초안을 작성하고, 고
 이 소스 폴더만 저장소에 올리세요. 실제 사용 중인 업무보고 작성시스템 전체 폴더를 업로드하지 마세요. `.gitignore`는 `data/`, `.venv/`, `node_modules/`를 제외합니다. 배포 ZIP은 `python make_release.py`로 만듭니다. 명시된 소스 파일만 포함하고 사용 데이터는 포함하지 않습니다.
 
 사용 라이브러리와 라이선스는 [THIRD_PARTY.md](THIRD_PARTY.md)를 참조하세요.
+
+## EXE 빌드
+
+`installer/build.py`는 공식 Python 임베디드 패키지와 Node.js ZIP, 고정된 Python 의존성 및 node_modules를 묶고 Inno Setup으로 EXE를 만듭니다. 빌드 전에 `install.cmd`로 소스 의존성을 설치하세요. Inno Setup 7 컴파일러가 필요합니다.
+
+```powershell
+python installer/build.py --downloads build-downloads --iscc "C:\Tools\Inno Setup 7\ISCC.exe"
+```
+
+빌드 산출물·실제 사용자 데이터는 소스 저장소에 올리지 않습니다. Python 및 Node 런타임 라이선스는 설치 폴더의 `runtime`에 포함됩니다.

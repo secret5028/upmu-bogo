@@ -5,16 +5,16 @@ import zipfile
 
 ROOT=Path(__file__).resolve().parent
 FILES=['README.md','THIRD_PARTY.md','.gitignore','requirements.txt','package.json','package-lock.json',
-       'setup.py','install.ps1','install.cmd','create-shortcut.ps1','make_release.py',
+       'installer/bootstrap.py','installer/build.py','installer/setup.iss','setup.py','install.ps1','install.cmd','create-shortcut.ps1','make_release.py',
        'app/server.py','app/corpus.py','app/start.ps1','engine/report_loop.py',
-       'assets/approved.hwpx','defaults/report-header.json','tests/test_corpus.py','tests/test_distribution.py']
+       'assets/approved.hwpx','defaults/report-header.json','tests/test_corpus.py','tests/test_distribution.py','tests/test_installer.py']
 FILES += ['app/static/'+name for name in ['index.html','app.js','style.css','report-icon.svg','report-icon.ico']]
 
 def main():
     missing=[name for name in FILES if not (ROOT/name).is_file()]
     if missing:raise SystemExit('Missing source files: '+', '.join(missing))
     out=ROOT/'dist';out.mkdir(exist_ok=True)
-    target=out/'work-report-workspace-0.1.0.zip'
+    target=out/'work-report-workspace-0.2.0-source.zip'
     with zipfile.ZipFile(target,'w',compression=zipfile.ZIP_DEFLATED) as z:
         for name in FILES:z.write(ROOT/name,'work-report-workspace/'+name)
     digest=hashlib.sha256(target.read_bytes()).hexdigest()
