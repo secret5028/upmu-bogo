@@ -1,0 +1,4 @@
+master-of-hwp==0.2.4
+lxml==6.1.1
+openpyxl==3.1.5
+pypdf==6.21.4

@@ -1,0 +1,13 @@
+# All actual documents, profiles, conversations, contacts, API secrets and logs.
+/data/
+/.venv/
+/node_modules/
+/업무보고 실행.vbs
+__pycache__/
+*.pyc
+*.log
+*.pid
+.env
+.env.*
+*.lnk
+/dist/
