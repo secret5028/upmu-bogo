@@ -2,7 +2,7 @@
 
 Windows에서 기존 업무보고를 참고해 AI와 초안을 작성하고, 고정 양식의 HWPX로 저장하는 로컬 웹앱입니다.
 
-**[Windows 설치파일 다운로드](https://github.com/secret5028/upmu-bogo/releases/latest/download/UpmuBogo-Setup-0.2.0-x64.exe)** · [릴리스 및 변경사항](https://github.com/secret5028/upmu-bogo/releases)
+**[Windows 설치파일 다운로드](https://github.com/secret5028/upmu-bogo/releases/latest/download/UpmuBogo-Setup-0.2.1-x64.exe)** · [릴리스 및 변경사항](https://github.com/secret5028/upmu-bogo/releases)
 
 ## 무엇을 하는 프로그램인가요?
 
@@ -10,7 +10,7 @@ Windows에서 기존 업무보고를 참고해 AI와 초안을 작성하고, 고
 
 **기존 보고서 폴더 → 코퍼스 구축 → 새 자료·요청 입력 → AI 제목·본문 제안 → 수정·검토 → HWPX 저장**
 
-보고자·보고일자는 입력란에서 바꿀 수 있습니다. 본문은 대화로 작성하고 오른쪽에서 확인합니다. 완성본을 참고사례로 저장하거나 작성 기준을 적용하면 다음 작성에 활용됩니다. AI 모델 자체를 학습시키는 기능은 아닙니다.
+보고자·보고일자는 입력란에서 바꿀 수 있습니다. 보고목적은 보고서별로 네 항목 중 하나를 선택하며, 미선택이면 모두 빈 체크로 출력됩니다. 기존 보고서는 목적을 선택한 뒤 초안을 다시 생성해야 반영됩니다. 본문은 대화로 작성하고 오른쪽에서 확인합니다. 완성본을 참고사례로 저장하거나 작성 기준을 적용하면 다음 작성에 활용됩니다. AI 모델 자체를 학습시키는 기능은 아닙니다.
 
 ## 업무보고 샘플부터 보기
 
@@ -21,7 +21,7 @@ Windows에서 기존 업무보고를 참고해 AI와 초안을 작성하고, 고
 | 회의 참석 보고: 회의개요 → 회의결과 → 조치계획 | [HWPX](examples/01_회의참석보고.hwpx) | [본문](examples/01_회의참석보고.txt) · [양식 미리보기](examples/01_회의참석보고.svg) |
 | 현장조사 결과 보고: 조사개요 → 조사결과 → 조치계획 | [HWPX](examples/02_현장조사결과보고.hwpx) | [본문](examples/02_현장조사결과보고.txt) · [양식 미리보기](examples/02_현장조사결과보고.svg) |
 
-GitHub의 HWPX 파일 화면에서 **Download raw file**을 눌러 다운로드하세요. 샘플은 저장소에서 별도로 받으며, 현재 v0.2.0 EXE에 자동 포함되지는 않습니다. [샘플 활용 안내](examples/README.md)를 참고하세요.
+GitHub의 HWPX 파일 화면에서 **Download raw file**을 눌러 다운로드하세요. 샘플은 저장소에서 별도로 받으며, 현재 EXE에 자동 포함되지는 않습니다. [샘플 활용 안내](examples/README.md)를 참고하세요.
 
 ### 샘플로 첫 보고서 만들기
 
@@ -39,7 +39,7 @@ GitHub의 HWPX 파일 화면에서 **Download raw file**을 눌러 다운로드�
 ## 다운로드 및 설치
 
 1. 위 **Windows 설치파일 다운로드**를 눌러 EXE 하나를 받습니다.
-2. `UpmuBogo-Setup-0.2.0-x64.exe`를 실행하고 설치를 진행합니다.
+2. `UpmuBogo-Setup-0.2.1-x64.exe`를 실행하고 설치를 진행합니다.
 3. 바탕화면의 **업무보고 작업실** 아이콘을 실행합니다.
 4. **양식 수정**에서 보고자 정보를 입력하고 원하는 AI를 연결합니다.
 

@@ -26,7 +26,7 @@ import urllib.error
 from corpus import Corpus
 
 HERE = Path(__file__).resolve().parent
-FIELDS = ['title','report_date','event_datetime','place','reporter','reporter_contact','attendees','main_content','result_or_issue','action_plan','report_body']
+FIELDS = ['report_purpose','title','report_date','event_datetime','place','reporter','reporter_contact','attendees','main_content','result_or_issue','action_plan','report_body']
 TOKEN = secrets.token_urlsafe(32)
 LOCK = threading.Lock()
 AI_LOCK = threading.Lock()
@@ -347,7 +347,7 @@ def reference_reports(query):
     return [x[2] for x in sorted(scored,key=lambda x:(x[0],x[1]),reverse=True)[:3]]
 
 def missing_input(fields):
-    required=['title','report_date'] if fields.get('report_body','').strip() else [k for k in FIELDS if k!='report_body']
+    required=['title','report_date'] if fields.get('report_body','').strip() else [k for k in FIELDS if k not in ('report_body','report_purpose')]
     return [k for k in required if not str(fields.get(k,'')).strip()]
 
 def run(args, *, text=None, cwd=None, timeout=180):
@@ -381,6 +381,8 @@ def clean_fields(data):
         v=data.get(k,'')
         if not isinstance(v,str) or len(v)>25000:raise ValueError('항목은 25,000자 이하의 문자열이어야 합니다.')
         out[k]=v.strip()
+    if out['report_purpose'] not in ('','방침필요','상황·행사보고','결과보고(지시사항등)','회의자료'):
+        raise ValueError('보고목적은 네 항목 중 하나를 선택하세요.')
     out['reporter']='고정 양식'
     out['reporter_contact']='고정 양식'
     return out
@@ -449,6 +451,7 @@ def ai_prompt(note,fields):
             'report_body에 완성된 본문을 작성하세요. □ 소제목, ❍ 항목, - 세부항목으로 줄을 구분하세요. 소제목의 명칭·순서·개수는 이번 업무와 유사 보고서에 맞게 정하고 고정 목차에 끼워 넣지 마세요. '
             '사용자가 구체적인 소제목·본문을 제시하면 그것이 최우선이며 문구와 순서를 유지하세요. 일반 질문이나 제목만 수정하는 요청에는 기존 report_body를 유지하세요. '
             '별도 항목 필드는 호환용이며 report_body와 일치시켜야 합니다. 사용자 원문에 없는 배경 설명이나 반복 문장을 추가하지 마세요. '
+            'report_purpose는 방침필요, 상황·행사보고, 결과보고(지시사항등), 회의자료 중 하나 또는 미선택을 뜻하는 빈 문자열이어야 합니다. 사용자가 선택한 보고목적은 변경 요청이 없으면 유지하세요. '
             '다음 키를 모두 갖는 JSON 객체만 출력하세요. 각 값은 문자열: '+', '.join(FIELDS+['assistant_message'])+
             '\n<user_data>\n'+json.dumps({'메모':note,'현재항목':fields},ensure_ascii=False)+'\n</user_data>')
 

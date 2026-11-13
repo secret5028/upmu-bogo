@@ -11,13 +11,13 @@ FILES=['README.md','THIRD_PARTY.md','.gitignore','requirements.txt','package.jso
 FILES += ['app/static/'+name for name in ['index.html','app.js','style.css','report-icon.svg','report-icon.ico']]
 FILES += ['examples/README.md'] + ['examples/'+stem+ext
           for stem in ['01_회의참석보고','02_현장조사결과보고']
-          for ext in ['.hwpx','.txt','.svg']]
+          for ext in ['.hwpx','.txt','.svg','.png']]
 
 def main():
     missing=[name for name in FILES if not (ROOT/name).is_file()]
     if missing:raise SystemExit('Missing source files: '+', '.join(missing))
     out=ROOT/'dist';out.mkdir(exist_ok=True)
-    target=out/'work-report-workspace-0.2.0-source.zip'
+    target=out/'work-report-workspace-0.2.1-source.zip'
     with zipfile.ZipFile(target,'w',compression=zipfile.ZIP_DEFLATED) as z:
         for name in FILES:z.write(ROOT/name,'work-report-workspace/'+name)
     digest=hashlib.sha256(target.read_bytes()).hexdigest()

@@ -46,4 +46,21 @@ with tempfile.TemporaryDirectory(prefix='report-install-check-') as td:
     preview=project/'preview.svg'
     subprocess.run([node,str(cli),'render',saved['final'],'-o',str(preview),'--silent'],check=True,capture_output=True)
     assert preview.is_file() and '검증개요' in preview.read_text(encoding='utf-8')
+    # Switching purposes must clear the previous check; legacy sessions start unchecked.
+    labels=['방침필요','상황·행사보고','결과보고(지시사항등)','회의자료']
+    for selected in [*labels, '']:
+        call('update','--session',sid,'--fields-json',json.dumps({'report_purpose':selected},ensure_ascii=False))
+        made=call('generate','--session',sid)
+        assert all(made['verification'].values()),made
+        with zipfile.ZipFile(made['draft']) as z:
+            section=ET.fromstring(z.read('Contents/section0.xml'))
+        ns={'hp':'http://www.hancom.co.kr/hwpml/2011/paragraph'}
+        assert not section.findall('.//hp:checkBtn',ns)
+        text=''.join(section.itertext())
+        for label in labels:
+            assert ('☑' if selected==label else '☐')+' '+label in text
+        assert text.count('☑') == bool(selected)
+    invalid=subprocess.run([sys.executable,str(system/'scripts/report_loop.py'),'update','--session',sid,'--fields-json',json.dumps({'report_purpose':'알 수 없는 목적'},ensure_ascii=False)],capture_output=True)
+    rejected=subprocess.run([sys.executable,str(system/'scripts/report_loop.py'),'generate','--session',sid],capture_output=True)
+    assert rejected.returncode != 0
 print('PASS: fresh project, sanitized form, HWPX generation, format checks, finalize, preview')

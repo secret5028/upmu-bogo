@@ -7,7 +7,7 @@
 [Setup]
 AppId={{DF93F785-7775-43B2-A639-683B60A08986}
 AppName=업무보고 작업실
-AppVersion=0.2.0
+AppVersion=0.2.1
 AppPublisher=secret5028
 AppPublisherURL=https://github.com/secret5028/upmu-bogo
 DefaultDirName={localappdata}\Programs\UpmuBogo
@@ -17,7 +17,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir={#Output}
-OutputBaseFilename=UpmuBogo-Setup-0.2.0-x64
+OutputBaseFilename=UpmuBogo-Setup-0.2.1-x64
 SetupIconFile={#Payload}\app\static\report-icon.ico
 UninstallDisplayIcon={app}\app\static\report-icon.ico
 Compression=lzma2

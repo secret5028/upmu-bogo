@@ -27,6 +27,7 @@ DRAFT_DIR = ROOT / "60_작성중"
 FINAL_DIR = ROOT / "70_완성문서"
 
 FIELD_LABELS = {
+    "report_purpose": "보고목적",
     "title": "업무보고 제목",
     "report_date": "보고일자",
     "event_datetime": "업무 일시",
@@ -51,7 +52,25 @@ QUESTIONS = {
     "result_or_issue": "확인 결과나 문제점은 무엇인가요?",
     "action_plan": "조치사항이나 향후계획은 무엇인가요? 없다면 '해당 없음'이라고 해주세요.",
 }
-REQUIRED = [k for k in FIELD_LABELS if k != "report_body"]
+REQUIRED = [k for k in FIELD_LABELS if k not in ("report_body", "report_purpose")]
+PURPOSES = ("방침필요", "상황·행사보고", "결과보고(지시사항등)", "회의자료")
+
+
+def set_report_purpose(paragraph, selected=""):
+    """Rebuild paired checkbox/label runs, discarding stale template checks."""
+    if selected not in ("", *PURPOSES):
+        raise ValueError("보고목적은 네 항목 중 하나를 선택하세요.")
+    buttons = paragraph.findall('.//hp:checkBtn', NS)
+    if len(buttons) != 4:
+        raise RuntimeError("승인 양식의 보고목적 체크박스 4개를 찾지 못했습니다.")
+    text_run = next(r for r in paragraph.findall('hp:run', NS) if '방침' in ''.join(r.itertext()))
+    char_id = text_run.get('charPrIDRef')
+    for child in list(paragraph):
+        paragraph.remove(child)
+    for index, label in enumerate(PURPOSES):
+        run = ET.SubElement(paragraph, HP+'run', charPrIDRef=char_id)
+        ET.SubElement(run, HP+'t').text = ('☑' if selected == label else '☐')+' '+label+('  ' if index<3 else '')
+
 
 
 def load_profiles():
@@ -523,12 +542,14 @@ def generate(sid, force=False):
             _plain(allp[slots[0]+2], staff["phone"])
         purpose = next((i for i,p in enumerate(allp[:firstpos]) if direct_text(p).strip()=="보고목적"), None)
         if purpose is None:raise RuntimeError("보고목적 입력란을 찾지 못했습니다.")
-        _plain(allp[purpose+1], fixed_header["purpose"])
     else:
         for p in allp[:firstpos]:
             val = direct_text(p).strip()
             if re.fullmatch(r"[가-힣]{2,4}\s*\(\d+\)", val) or re.fullmatch(r"\d{2,3}-\d{3,4}-\d{4}", val):
                 _plain(p, "")
+    purpose = next(i for i,p in enumerate(allp[:firstpos]) if direct_text(p).strip()=="보고목적")
+    selected_purpose = session['fields'].get('report_purpose', '').strip()
+    set_report_purpose(allp[purpose+1], selected_purpose)
     for key in (["title", "report_date"] if fixed_header else ["title", "report_date", "reporter", "reporter_contact"]):
         _plain(allp[headers[key][1]], visible(fields[key]))
     # The original short-year date used a narrow cell. Use its existing 9pt
@@ -633,6 +654,7 @@ def generate(sid, force=False):
         for p in expected:
             planned.append(deepcopy(p))
         verification = {
+            "report_purpose_checked": not checked_root.findall('.//hp:checkBtn', NS) and any(direct_text(p) == '  '.join(('☑' if label == selected_purpose else '☐')+' '+label for label in PURPOSES) for p in checked_root.findall('.//hp:p', NS)),
             "kordoc_content_verified": True,
             "approved_fonts_and_spacing": definitions_match and [signature(p) for p in checked_body] == [signature(p) for p in expected],
             "exact_body_text_and_spaces": [direct_text(p) for p in checked_body] == lines,

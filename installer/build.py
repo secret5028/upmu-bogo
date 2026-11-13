@@ -49,7 +49,7 @@ def main():
     with zipfile.ZipFile(downloads/nodezip) as z:
         for name in ['node.exe','LICENSE']:
             (node_dir/name).write_bytes(z.read(f'node-v{NODE_VERSION}-win-x64/{name}'))
-    manifest={'version':'0.2.0','python':PY_VERSION,'node':NODE_VERSION,
+    manifest={'version':'0.2.1','python':PY_VERSION,'node':NODE_VERSION,
               'archives':{name:hashlib.sha256((downloads/name).read_bytes()).hexdigest() for name in archives}}
     (payload/'runtime-manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
     (ROOT/'build/current.json').write_text(json.dumps({'payload':str(payload)},ensure_ascii=False),encoding='utf-8')
@@ -57,8 +57,8 @@ def main():
     compiled=subprocess.run([str(args.iscc.resolve()),'/Q','/DPayload='+str(payload),'/DOutput='+str(out),str(ROOT/'installer/setup.iss')],capture_output=True)
     (payload.parent/'compiler.log').write_bytes(compiled.stdout+compiled.stderr)
     if compiled.returncode:raise RuntimeError((compiled.stdout+compiled.stderr).decode('utf-8',errors='replace')[-4000:])
-    exe=out/'UpmuBogo-Setup-0.2.0-x64.exe'
-    (out/'UpmuBogo-Setup-0.2.0-x64.sha256').write_text(hashlib.sha256(exe.read_bytes()).hexdigest()+'  '+exe.name+'\n',encoding='utf-8')
+    exe=out/'UpmuBogo-Setup-0.2.1-x64.exe'
+    (out/'UpmuBogo-Setup-0.2.1-x64.sha256').write_text(hashlib.sha256(exe.read_bytes()).hexdigest()+'  '+exe.name+'\n',encoding='utf-8')
     print('INSTALLER: '+str(exe),flush=True)
 
 if __name__=='__main__':main()
