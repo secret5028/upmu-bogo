@@ -36,15 +36,25 @@ with tempfile.TemporaryDirectory(prefix='report-install-check-') as td:
     call('build-profiles')
     s=call('start','--request','배포본 설치 검증')
     sid=s['session_id']
-    fields={'title':'배포본 설치 검증','report_date':'2026-11-13','report_body':'□ 검증개요\n❍ 새 설치 환경에서 보고서 생성\n□ 확인결과\n❍ 기호와 서식 보존\n- 개인정보 없는 기본 양식 사용'}
+    fields={'title':'배포본 설치 검증','report_date':'2026-11-13','report_body':'□ 검증개요\n❍ 새 설치 환경에서 보고서 생성\n□ 확인결과\n❍ 기호와 서식 보존\n- 개인정보 없는 기본 양식 사용\n※ 주석의  공백·기호 보존\n※**강조 주석** 확인\n❍ 주석 뒤의 항목도 보존'}
     call('update','--session',sid,'--fields-json',json.dumps(fields,ensure_ascii=False))
     made=call('generate','--session',sid)
     assert all(made['verification'].values()),made
+    ns={'hp':'http://www.hancom.co.kr/hwpml/2011/paragraph'}
+    with zipfile.ZipFile(made['draft']) as z:
+        document=ET.fromstring(z.read('Contents/section0.xml'))
+    body=[p for p in document if p.tag.endswith('}p')]
+    text=lambda p: ''.join(p.itertext())
+    note=next(p for p in body if '※ 주석의  공백·기호 보존' in text(p))
+    detail=next(p for p in body if '- 개인정보 없는 기본 양식 사용' in text(p))
+    assert note.get('paraPrIDRef')==detail.get('paraPrIDRef')
+    assert [r.get('charPrIDRef') for r in note.findall('hp:run',ns)]==[r.get('charPrIDRef') for r in detail.findall('hp:run',ns)]
     call('finalize','--session',sid)
     saved=json.loads((system/'작성세션'/f'{sid}.json').read_text(encoding='utf-8'))
     assert hashlib.sha256(Path(saved['final']).read_bytes()).hexdigest()==saved['draft_sha256']
     preview=project/'preview.svg'
     subprocess.run([node,str(cli),'render',saved['final'],'-o',str(preview),'--silent'],check=True,capture_output=True)
+    assert '※' in preview.read_text(encoding='utf-8')
     assert preview.is_file() and '검증개요' in preview.read_text(encoding='utf-8')
     # Switching purposes must clear the previous check; legacy sessions start unchecked.
     labels=['방침필요','상황·행사보고','결과보고(지시사항등)','회의자료']

@@ -354,6 +354,7 @@ def find_header_indices(paras):
 NS = {"hp": "http://www.hancom.co.kr/hwpml/2011/paragraph", "hh": "http://www.hancom.co.kr/hwpml/2011/head"}
 HP = "{" + NS["hp"] + "}"
 APPROVED_RELATIVE = Path("50_문서템플릿/업무보고/기본 업무보고.hwpx")
+BODY_PREFIXES = {"□": "□ ", "❍": "  ❍ ", "-": "    - ", "※": "    ※ "}
 
 
 def direct_text(p):
@@ -387,7 +388,8 @@ def body_lines(fields):
             if text.startswith('□'):lines.append('□ '+text[1:].lstrip())
             elif text.startswith(('❍','○','◦','•')):lines.append('  ❍ '+text[1:].lstrip())
             elif re.match(r'^[-–]\s',text):lines.append('    - '+text[1:].lstrip())
-            else:raise ValueError('보고서 본문의 각 항목은 □, ❍, - 기호로 시작해야 합니다: '+text[:60])
+            elif text.startswith('※'):lines.append(BODY_PREFIXES['※']+text[1:].lstrip())
+            else:raise ValueError('보고서 본문의 각 항목은 □, ❍, -, ※ 기호로 시작해야 합니다: '+text[:60])
         if not lines or not lines[0].startswith('□'):raise ValueError('보고서 본문에 소제목이 필요합니다.')
         return lines
     lines = ["□ 보고개요", f"  ❍ 일    시: {fields['event_datetime']}",
@@ -401,7 +403,9 @@ def body_lines(fields):
             item = item.strip()
             if not item:
                 continue
-            if re.match(r"^[-–]\s", item):
+            if item.startswith('※'):
+                lines.append(BODY_PREFIXES['※'] + item[1:].lstrip())
+            elif re.match(r"^[-–]\s", item):
                 lines.append("    - " + re.sub(r"^[-–]\s*", "", item))
             else:
                 lines.append("  ❍ " + re.sub(r"^[❍○◦•·]\s*", "", item))
@@ -512,6 +516,9 @@ def generate(sid, force=False):
         "❍": next(p for p in root if direct_text(p).strip().startswith("❍") and any("".join(r.itertext()).strip() == "❍" for r in p.findall("hp:run", NS))),
         "-": next(p for p in root if direct_text(p).strip().startswith("-")),
     }
+    # The approved form has no dedicated note style. Reuse its detail font,
+    # paragraph spacing and indentation, keeping the literal ※ character.
+    prototypes['※'] = prototypes['-']
     # Explicit user emphasis uses a bold variant of the approved body font.
     emphasis=set(re.findall(r'\*\*([^*\r\n]+)\*\*',fields.get('report_body','')))
     bold_id=None
@@ -576,7 +583,7 @@ def generate(sid, force=False):
     expected = []
     markers = {}
     for i, line in enumerate(lines):
-        role = "□" if line.startswith("□") else "❍" if line.lstrip().startswith("❍") else "-"
+        role = line.lstrip()[0]
         target = _styled(prototypes[role], line)
         if bold_id:
             for run in list(target.findall('hp:run',NS)):
@@ -595,7 +602,7 @@ def generate(sid, force=False):
                     ET.SubElement(new,HP+'t').text=value;target.insert(pos,new);pos+=1
         expected.append(target)
         marker = f"KORDOCBODY{i:05d}TOKEN"
-        prefix = "□ " if role == "□" else "  ❍ " if role == "❍" else "    - "
+        prefix = BODY_PREFIXES[role]
         root.append(_styled(prototypes[role], prefix + marker))
         markers[marker] = line[len(prefix):]
     _clear_layout(root)
@@ -621,7 +628,7 @@ def generate(sid, force=False):
         if output_data["Contents/header.xml"] != original["Contents/header.xml"]:
             raise RuntimeError("kordoc이 승인 양식의 서식 정의를 변경했습니다.")
         made = ET.fromstring(output_data["Contents/section0.xml"])
-        body = [p for p in made if direct_text(p).strip().startswith(("□", "❍", "-"))]
+        body = [p for p in made if direct_text(p).strip().startswith(tuple(BODY_PREFIXES))]
         compact = lambda s: re.sub(r"\s+", "", s)
         if len(body) != len(expected) or any(compact(html.unescape(direct_text(p))) != compact(line) for p, line in zip(body, lines)):
             raise RuntimeError("kordoc 생성 내용 불일치: 서식 보정 중단 " + repr([(direct_text(p), line) for p, line in zip(body, lines) if compact(html.unescape(direct_text(p))) != compact(line)]))
@@ -644,7 +651,7 @@ def generate(sid, force=False):
         with zipfile.ZipFile(ready) as checked_zip:
             checked_root = ET.fromstring(checked_zip.read("Contents/section0.xml"))
             definitions_match = checked_zip.read("Contents/header.xml") == original["Contents/header.xml"]
-        checked_body = [p for p in checked_root if direct_text(p).strip().startswith(("□", "❍", "-"))]
+        checked_body = [p for p in checked_root if direct_text(p).strip().startswith(tuple(BODY_PREFIXES))]
         def signature(p):
             return (p.get("paraPrIDRef"), p.get("styleIDRef"),
                     [(dict(r.attrib), "".join(r.xpath("./hp:t//text()", namespaces=NS))) for r in p.findall("hp:run", NS)])

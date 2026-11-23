@@ -2,7 +2,7 @@
 
 Windows에서 기존 업무보고를 참고해 AI와 초안을 작성하고, 고정 양식의 HWPX로 저장하는 로컬 웹앱입니다.
 
-**[Windows 설치파일 다운로드](https://github.com/secret5028/upmu-bogo/releases/latest/download/UpmuBogo-Setup-0.2.1-x64.exe)** · [릴리스 및 변경사항](https://github.com/secret5028/upmu-bogo/releases)
+**[Windows 설치파일 다운로드](https://github.com/secret5028/upmu-bogo/releases/latest/download/UpmuBogo-Setup-0.2.2-x64.exe)** · [릴리스 및 변경사항](https://github.com/secret5028/upmu-bogo/releases)
 
 ## 무엇을 하는 프로그램인가요?
 
@@ -39,7 +39,7 @@ GitHub의 HWPX 파일 화면에서 **Download raw file**을 눌러 다운로드�
 ## 다운로드 및 설치
 
 1. 위 **Windows 설치파일 다운로드**를 눌러 EXE 하나를 받습니다.
-2. `UpmuBogo-Setup-0.2.1-x64.exe`를 실행하고 설치를 진행합니다.
+2. `UpmuBogo-Setup-0.2.2-x64.exe`를 실행하고 설치를 진행합니다.
 3. 바탕화면의 **업무보고 작업실** 아이콘을 실행합니다.
 4. **양식 수정**에서 보고자 정보를 입력하고 원하는 AI를 연결합니다.
 
@@ -132,3 +132,7 @@ python installer/build.py --downloads build-downloads --iscc "C:\Tools\Inno Setu
 ```
 
 빌드 산출물·실제 사용자 데이터는 소스 저장소에 올리지 않습니다. Python 및 Node 런타임 라이선스는 설치 폴더의 `runtime`에 포함됩니다.
+
+### v0.2.2 주석 출력
+
+본문의 `※` 주석을 그대로 생성·검증·미리보기·저장합니다. 주석은 승인 양식의 하위 항목 글꼴·들여쓰기·문단 간격을 사용하며, `-`로 바꾸지 않습니다. 기존 `□`, `❍`, `-` 서식도 유지됩니다. AI 작성 지침에도 주석 규칙을 반영했습니다. 기존 초안은 업데이트 후 다시 생성하세요.
