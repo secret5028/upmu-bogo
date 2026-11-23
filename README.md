@@ -2,7 +2,7 @@
 
 Windows에서 기존 업무보고를 참고해 AI와 초안을 작성하고, 고정 양식의 HWPX로 저장하는 로컬 웹앱입니다.
 
-**[Windows 설치파일 다운로드](https://github.com/secret5028/upmu-bogo/releases/latest/download/UpmuBogo-Setup-0.2.2-x64.exe)** · [릴리스 및 변경사항](https://github.com/secret5028/upmu-bogo/releases)
+**[Windows 설치파일 다운로드](https://github.com/secret5028/upmu-bogo/releases/latest/download/UpmuBogo-Setup-0.2.3-x64.exe)** · [릴리스 및 변경사항](https://github.com/secret5028/upmu-bogo/releases)
 
 ## 무엇을 하는 프로그램인가요?
 
@@ -39,7 +39,7 @@ GitHub의 HWPX 파일 화면에서 **Download raw file**을 눌러 다운로드�
 ## 다운로드 및 설치
 
 1. 위 **Windows 설치파일 다운로드**를 눌러 EXE 하나를 받습니다.
-2. `UpmuBogo-Setup-0.2.2-x64.exe`를 실행하고 설치를 진행합니다.
+2. `UpmuBogo-Setup-0.2.3-x64.exe`를 실행하고 설치를 진행합니다.
 3. 바탕화면의 **업무보고 작업실** 아이콘을 실행합니다.
 4. **양식 수정**에서 보고자 정보를 입력하고 원하는 AI를 연결합니다.
 
@@ -136,3 +136,11 @@ python installer/build.py --downloads build-downloads --iscc "C:\Tools\Inno Setu
 ### v0.2.2 주석 출력
 
 본문의 `※` 주석을 그대로 생성·검증·미리보기·저장합니다. 주석은 승인 양식의 하위 항목 글꼴·들여쓰기·문단 간격을 사용하며, `-`로 바꾸지 않습니다. 기존 `□`, `❍`, `-` 서식도 유지됩니다. AI 작성 지침에도 주석 규칙을 반영했습니다. 기존 초안은 업데이트 후 다시 생성하세요.
+
+### v0.2.3 반복 서식 저장
+
+**작성 기준·참고사례 → 항목 앞 괄호 안의 내용만 자동으로 굵게 표시**를 선택하고 저장하세요. `❍ (검토목적) 내용`을 입력하면 괄호 안의 `검토목적`만 자동 강조됩니다. 별표를 매번 입력할 필요가 없습니다. 날짜나 본문 중간의 괄호는 자동 강조하지 않습니다.
+
+규칙은 로컬 `data/99_시스템/report-memory.json`에 저장되어 앱을 재시작하거나 업데이트해도 유지됩니다. 새 보고서와 기존 보고서의 다음 초안 생성에 적용됩니다. 새 PC 설치 시에는 설정에서 켜세요. 기존에 저장한 HWPX 파일은 자동 변경되지 않습니다.
+
+직접 지정한 `**부분 강조**`도 지원하며, 지정한 위치의 원래 글꼴·크기에서 굵기만 변경합니다. 초안 화면에도 강조가 표시됩니다.

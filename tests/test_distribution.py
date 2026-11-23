@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='report-install-check-') as td:
     call('build-profiles')
     s=call('start','--request','배포본 설치 검증')
     sid=s['session_id']
-    fields={'title':'배포본 설치 검증','report_date':'2026-11-13','report_body':'□ 검증개요\n❍ 새 설치 환경에서 보고서 생성\n□ 확인결과\n❍ 기호와 서식 보존\n- 개인정보 없는 기본 양식 사용\n※ 주석의  공백·기호 보존\n※**강조 주석** 확인\n❍ 주석 뒤의 항목도 보존'}
+    fields={'title':'배포본 설치 검증','report_date':'2026-11-13','report_body':'□ 검증개요\n❍ 새 설치 환경에서 보고서 생성\n□ 확인결과\n❍ 기호와 서식 보존\n- 개인정보 없는 기본 양식 사용\n※ 주석의  공백·기호 보존\n※**강조 주석** 확인\n❍ 주석 뒤의 항목도 보존\n❍ **반복** 반복\n❍ 반복\n□ **강조 소제목**\n- **세부 강조**'}
     call('update','--session',sid,'--fields-json',json.dumps(fields,ensure_ascii=False))
     made=call('generate','--session',sid)
     assert all(made['verification'].values()),made
@@ -49,6 +49,26 @@ with tempfile.TemporaryDirectory(prefix='report-install-check-') as td:
     detail=next(p for p in body if '- 개인정보 없는 기본 양식 사용' in text(p))
     assert note.get('paraPrIDRef')==detail.get('paraPrIDRef')
     assert [r.get('charPrIDRef') for r in note.findall('hp:run',ns)]==[r.get('charPrIDRef') for r in detail.findall('hp:run',ns)]
+    with zipfile.ZipFile(made['draft']) as z:
+        head=ET.fromstring(z.read('Contents/header.xml'))
+    hn={'hh':'http://www.hancom.co.kr/hwpml/2011/head'}
+    styles={p.get('id'):p for p in head.findall('.//hh:charPr',hn)}
+    repeated=[p for p in body if '반복' in text(p)]
+    boldtexts=lambda p: ''.join(''.join(r.itertext()) for r in p.findall('hp:run',ns) if styles[r.get('charPrIDRef')].find('hh:bold',hn) is not None)
+    assert len(repeated)==2 and boldtexts(repeated[0])=='반복' and boldtexts(repeated[1])==''
+    with zipfile.ZipFile(template) as z:
+        originalhead=ET.fromstring(z.read('Contents/header.xml'))
+    originalstyles={p.get('id'):p for p in originalhead.findall('.//hh:charPr',hn)}
+    body_style_ids={r.get('charPrIDRef') for p in body if text(p).strip().startswith(('□','❍','-','※')) for r in p.findall('hp:run',ns)}
+    for identifier,style in styles.items():
+        if identifier not in body_style_ids or identifier in originalstyles or style.find('hh:bold',hn) is None:continue
+        # New emphasis styles may differ only in id/bold from an approved style.
+        def signature(element):
+            clone=ET.fromstring(ET.tostring(element));clone.attrib.pop('id',None)
+            bold=clone.find('hh:bold',hn)
+            if bold is not None:clone.remove(bold)
+            return ET.tostring(clone)
+        assert any(signature(style)==signature(base) for base in originalstyles.values())
     call('finalize','--session',sid)
     saved=json.loads((system/'작성세션'/f'{sid}.json').read_text(encoding='utf-8'))
     assert hashlib.sha256(Path(saved['final']).read_bytes()).hexdigest()==saved['draft_sha256']
@@ -70,6 +90,21 @@ with tempfile.TemporaryDirectory(prefix='report-install-check-') as td:
         for label in labels:
             assert ('☑' if selected==label else '☐')+' '+label in text
         assert text.count('☑') == bool(selected)
+    # Persisted rule works without markup and on fresh sessions; parentheses stay plain.
+    (system/'report-memory.json').write_text(json.dumps({'formatting':{'bold_item_labels':True}}),encoding='utf-8')
+    for request in ['첫 보고서','새 보고서']:
+        rule_sid=call('start','--request',request)['session_id']
+        call('update','--session',rule_sid,'--fields-json',json.dumps({'title':request,'report_date':'2026-11-23','report_body':'□ 개요\n❍ (대    상) 일반 본문 (추가 설명)\n❍ **(검토목적)** 일반 본문\n❍ (2026. 11. 23.) 날짜\n※ 주석 유지'},ensure_ascii=False))
+        rule=call('generate','--session',rule_sid)
+        assert all(rule['verification'].values())
+        with zipfile.ZipFile(rule['draft']) as z:
+            section=ET.fromstring(z.read('Contents/section0.xml'));head=ET.fromstring(z.read('Contents/header.xml'))
+        styles={p.get('id'):p for p in head.findall('.//hh:charPr',hn)}
+        for label in ['대    상','검토목적']:
+            paragraph=next(p for p in section if '('+label+')' in ''.join(p.itertext()))
+            assert boldtexts(paragraph)==label
+        paragraph=next(p for p in section if '날짜' in ''.join(p.itertext()))
+        assert not boldtexts(paragraph)
     invalid=subprocess.run([sys.executable,str(system/'scripts/report_loop.py'),'update','--session',sid,'--fields-json',json.dumps({'report_purpose':'알 수 없는 목적'},ensure_ascii=False)],capture_output=True)
     rejected=subprocess.run([sys.executable,str(system/'scripts/report_loop.py'),'generate','--session',sid],capture_output=True)
     assert rejected.returncode != 0

@@ -44,7 +44,8 @@ with tempfile.TemporaryDirectory(prefix='업무보고 설치 검증 ') as temp:
             if corpus['job']['state']!='running':break
             time.sleep(.1)
         assert corpus['stats']['documents']==1 and corpus['stats']['failed']==0,corpus
-        fields={'title':'설치파일 동작 검증','report_date':'2026-11-13','report_body':'□ 검증개요\n❍ 내장 실행환경으로 문서 생성\n□ 확인결과\n❍ Python과 Node 별도 설치 불필요\n- 문서 생성 및 저장 확인\n※ 설치본 주석 기호 유지 확인'}
+        request('/api/memory',{'rules':'테스트 작성 기준','keep':[],'formatting':{'bold_item_labels':True}})
+        fields={'title':'설치파일 동작 검증','report_date':'2026-11-13','report_body':'□ 검증개요\n❍ (검토목적) 내장 실행환경으로 문서 생성\n□ 확인결과\n❍ Python과 Node 별도 설치 불필요\n- 문서 생성 및 저장 확인\n※ 설치본 주석 기호 유지 확인'}
         saved=request('/api/save',{'fields':fields});sid=saved['id']
         request('/api/generate',{'id':sid,'fields':fields})
         final=request('/api/finalize',{'id':sid,'reviewed':True,'remember_example':False})
@@ -55,6 +56,21 @@ with tempfile.TemporaryDirectory(prefix='업무보고 설치 검증 ') as temp:
         assert all(session['verification'].values()),session['verification']
         runtime=json.loads((data/'99_시스템/kordoc-runtime.json').read_text(encoding='utf-8'))
         assert Path(runtime['node'])==app/'runtime/node/node.exe'
+        assert re.search(r'font-weight="bold"[^>]*>검토목적</text>',preview)
+        # A real restart must preserve the saved rule and apply it to a new report.
+        subprocess.run([str(system/'taskkill.exe'),'/PID',str(pid),'/T','/F'],capture_output=True,check=True)
+        pid=None
+        time.sleep(.3)
+        restarted=subprocess.run([str(python),str(app/'bootstrap.py'),'--no-browser','--data-dir',str(data),'--port','8898'],env=env,capture_output=True,encoding='utf-8',timeout=90,check=True)
+        state=json.loads(restarted.stdout);pid=state['pid'];base='http://127.0.0.1:'+str(state['port'])
+        html=opener.open(base,timeout=10).read().decode()
+        token=re.search(r'name="report-token" content="([^"]+)"',html)[1]
+        assert request('/api/config')['formatting']['bold_item_labels'] is True
+        assert request('/api/memory')['rules']=='테스트 작성 기준'
+        fresh=request('/api/generate',{'fields':dict(fields,title='재시작 후 새 보고서')})
+        assert fresh['session']['status']=='draft_ready'
+        preview=opener.open(base+'/api/preview?id='+fresh['session']['id'],timeout=30).read().decode()
+        assert re.search(r'font-weight="bold"[^>]*>검토목적</text>',preview)
         print('PASS: isolated PATH; bundled Python/Node; blank settings; corpus; generate; format checks; save; preview')
     finally:
         if pid:

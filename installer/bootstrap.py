@@ -14,7 +14,7 @@ import urllib.request
 import webbrowser
 
 ROOT=Path(__file__).resolve().parent
-VERSION='0.2.2'
+VERSION='0.2.3'
 PYTHON=ROOT/'runtime/python/python.exe'
 NODE=ROOT/'runtime/node/node.exe'
 NO_WINDOW=getattr(subprocess,'CREATE_NO_WINDOW',0)

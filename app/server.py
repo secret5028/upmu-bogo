@@ -183,12 +183,17 @@ def write_memory(data):
 
 def public_memory():
     m=memory()
-    return {'rules':m['rules'],'examples':[{k:e[k] for k in ('id','title','path')} for e in m['examples']]}
+    return {'rules':m['rules'],'formatting':m.get('formatting',{'bold_item_labels':False}),'examples':[{k:e[k] for k in ('id','title','path')} for e in m['examples']]}
 
 def save_memory(data):
     rules=data.get('rules','');keep=data.get('keep',[])
     if not isinstance(rules,str) or len(rules)>12000 or not isinstance(keep,list):raise ValueError('작성 기준은 12,000자 이하로 입력하세요.')
-    m=memory();m['rules']=rules.strip();m['examples']=[e for e in m['examples'] if e['id'] in keep];write_memory(m)
+    m=memory();m['rules']=rules.strip();m['examples']=[e for e in m['examples'] if e['id'] in keep]
+    if 'formatting' in data:
+        formatting=data['formatting']
+        if not isinstance(formatting,dict) or type(formatting.get('bold_item_labels')) is not bool:raise ValueError('자동 서식 설정이 올바르지 않습니다.')
+        m['formatting']={'bold_item_labels':formatting['bold_item_labels']}
+    write_memory(m)
     return public_memory()
 
 def remember_example(s,path):
@@ -449,7 +454,7 @@ def ai_prompt(note,fields):
             '일시·장소·참석자·주요 내용·회의결과·향후계획은 대화와 자료로 작성합니다. 빠진 사실은 대화로 질문하고, 사용자가 해당 없음이라고 확인하면 해당 없음으로 작성하세요. '
             '과거보고서는 소제목 구성과 간결한 공문서 문체만 참고하세요. 과거의 대상·주소·인명·날짜·수치·결과는 이번 사실로 사용하지 마세요. '
             'report_body에 완성된 본문을 작성하세요. □ 소제목, ❍ 항목, - 세부항목, ※ 주석으로 줄을 구분하세요. 사용자가 입력한 ※ 주석 기호를 유지하세요. 소제목의 명칭·순서·개수는 이번 업무와 유사 보고서에 맞게 정하고 고정 목차에 끼워 넣지 마세요. '
-            '사용자가 구체적인 소제목·본문을 제시하면 그것이 최우선이며 문구와 순서를 유지하세요. 일반 질문이나 제목만 수정하는 요청에는 기존 report_body를 유지하세요. '
+            '본문의 굵게 강조할 부분은 **문구**로 표시하고 사용자가 지정한 강조 범위를 보존하세요. 사용자가 구체적인 소제목·본문을 제시하면 그것이 최우선이며 문구와 순서를 유지하세요. 일반 질문이나 제목만 수정하는 요청에는 기존 report_body를 유지하세요. '
             '별도 항목 필드는 호환용이며 report_body와 일치시켜야 합니다. 사용자 원문에 없는 배경 설명이나 반복 문장을 추가하지 마세요. '
             'report_purpose는 방침필요, 상황·행사보고, 결과보고(지시사항등), 회의자료 중 하나 또는 미선택을 뜻하는 빈 문자열이어야 합니다. 사용자가 선택한 보고목적은 변경 요청이 없으면 유지하세요. '
             '다음 키를 모두 갖는 JSON 객체만 출력하세요. 각 값은 문자열: '+', '.join(FIELDS+['assistant_message'])+
@@ -560,7 +565,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not doc:raise ValueError('코퍼스 문서를 찾을 수 없습니다.')
                 return self.reply(200,doc)
             if path.path=='/api/memory':return self.reply(200,public_memory())
-            if path.path=='/api/config':return self.reply(200,{'ai':{k:bool(cli_command(k)) for k in ('codex','claude')},'project':str(PROJECT),'settings':settings(),'api':api_config(),'header':header_template(),'progress_plans':PROGRESS_PLANS})
+            if path.path=='/api/config':return self.reply(200,{'ai':{k:bool(cli_command(k)) for k in ('codex','claude')},'project':str(PROJECT),'settings':settings(),'api':api_config(),'header':header_template(),'progress_plans':PROGRESS_PLANS,'formatting':memory().get('formatting',{})})
             if path.path=='/api/sessions':
                 rows=[]
                 for p in (PROJECT/'99_시스템/작성세션').glob('*.json'):

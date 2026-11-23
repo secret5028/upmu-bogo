@@ -17,7 +17,7 @@ def main():
     missing=[name for name in FILES if not (ROOT/name).is_file()]
     if missing:raise SystemExit('Missing source files: '+', '.join(missing))
     out=ROOT/'dist';out.mkdir(exist_ok=True)
-    target=out/'work-report-workspace-0.2.2-source.zip'
+    target=out/'work-report-workspace-0.2.3-source.zip'
     with zipfile.ZipFile(target,'w',compression=zipfile.ZIP_DEFLATED) as z:
         for name in FILES:z.write(ROOT/name,'work-report-workspace/'+name)
     digest=hashlib.sha256(target.read_bytes()).hexdigest()

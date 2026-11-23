@@ -491,6 +491,57 @@ def _styled(proto, text):
     return p
 
 
+def format_item_labels(body):
+    """Persisted house style: bold only text inside a leading item label."""
+    pattern = r'^(\s*[❍○◦•-]\s*)(?:\*\*)?\(((?:\*\*)?[가-힣A-Za-z· /]{1,24}(?:\*\*)?)\)(?:\*\*)?'
+    return re.sub(pattern, lambda m: m[1]+'(**'+m[2].replace('**','')+'**)', body, flags=re.M)
+
+
+def emphasis_spans(marked, normalized):
+    """Map only explicitly marked occurrences onto normalized body offsets."""
+    spans=[]; parts=[]; cursor=0; length=0
+    for match in re.finditer(r'\*\*([^*\r\n]+)\*\*', marked):
+        prefix=marked[cursor:match.start()];parts.append(prefix);length+=len(prefix)
+        value=match.group(1);spans.append((length,length+len(value)))
+        parts.append(value);length+=len(value);cursor=match.end()
+    parts.append(marked[cursor:]);plain=''.join(parts)
+    # Prefix spacing is normalized; never replace the approved marker font.
+    source_start=1+len(plain[1:])-len(plain[1:].lstrip())
+    marker_pos=normalized.index(normalized.lstrip()[0])
+    target_start=marker_pos+1+len(normalized[marker_pos+1:])-len(normalized[marker_pos+1:].lstrip())
+    return [(max(a,source_start)-source_start+target_start,b-source_start+target_start)
+            for a,b in spans if b>source_start]
+
+
+def apply_emphasis(paragraph, spans, head, cache):
+    if not spans:return
+    props=head.find('.//hh:charProperties',NS)
+    offset=0
+    for run in list(paragraph.findall('hp:run',NS)):
+        text=''.join(run.xpath('./hp:t//text()',namespaces=NS))
+        cuts={0,len(text)}
+        for a,b in spans:
+            if a<offset+len(text) and b>offset:cuts.update((max(0,a-offset),min(len(text),b-offset)))
+        cuts=sorted(cuts);position=list(paragraph).index(run)
+        if not text:continue
+        paragraph.remove(run)
+        for start,end in zip(cuts,cuts[1:]):
+            new=ET.Element(HP+'run',attrib=dict(run.attrib))
+            if any(a<=offset+start<b for a,b in spans):
+                source=run.get('charPrIDRef')
+                if source not in cache:
+                    base=next(p for p in props if p.get('id')==source)
+                    if base.find('hh:bold',NS) is not None:cache[source]=source
+                    else:
+                        bold=deepcopy(base);identifier=str(max(int(p.get('id')) for p in props)+1)
+                        bold.set('id',identifier);ET.SubElement(bold,'{'+NS['hh']+'}bold')
+                        props.append(bold);props.set('itemCnt',str(len(props)));cache[source]=identifier
+                new.set('charPrIDRef',cache[source])
+            ET.SubElement(new,HP+'t').text=text[start:end]
+            paragraph.insert(position,new);position+=1
+        offset+=len(text)
+
+
 def generate(sid, force=False):
     session = load_session(sid)
     missing = missing_fields(session)
@@ -500,6 +551,10 @@ def generate(sid, force=False):
     fields = {k: str(session["fields"].get(k, "") or "[확인 필요]") for k in FIELD_LABELS}
     for key in ["report_date", "event_datetime"]:
         fields[key] = normalize_date(fields[key])
+    memory_path = ROOT / '99_시스템/report-memory.json'
+    formatting = json.loads(memory_path.read_text(encoding='utf-8')).get('formatting', {}) if memory_path.exists() else {}
+    if formatting.get('bold_item_labels', False):
+        fields['report_body'] = format_item_labels(fields.get('report_body',''))
     lines = body_lines(fields)
     # A single explicitly approved form prevents unrelated forms from silently changing fonts.
     template = ROOT / APPROVED_RELATIVE
@@ -519,19 +574,9 @@ def generate(sid, force=False):
     # The approved form has no dedicated note style. Reuse its detail font,
     # paragraph spacing and indentation, keeping the literal ※ character.
     prototypes['※'] = prototypes['-']
-    # Explicit user emphasis uses a bold variant of the approved body font.
-    emphasis=set(re.findall(r'\*\*([^*\r\n]+)\*\*',fields.get('report_body','')))
-    bold_id=None
-    if emphasis:
-        head=ET.fromstring(original['Contents/header.xml'])
-        charprs=head.find('.//hh:charProperties',NS)
-        body_run=max(prototypes['❍'].findall('hp:run',NS),key=lambda r:len(''.join(r.itertext()).strip()))
-        base=next(c for c in charprs if c.get('id')==body_run.get('charPrIDRef'))
-        bold=deepcopy(base);bold_id=str(max(int(c.get('id')) for c in charprs)+1);bold.set('id',bold_id)
-        if bold.find('hh:bold',NS) is None:ET.SubElement(bold,'{'+NS['hh']+'}bold')
-        charprs.append(bold);charprs.set('itemCnt',str(len(charprs)))
-        original['Contents/header.xml']=_xml(head)
-        entries=[(i,original['Contents/header.xml'] if i.filename=='Contents/header.xml' else data) for i,data in entries]
+    marked_lines = [html.unescape(x).strip() for x in fields.get('report_body','').splitlines() if x.strip()]
+    if formatting.get('bold_item_labels', False) and not fields.get('report_body','').strip():
+        marked_lines = [format_item_labels(line) for line in lines]
     for key in ["title", "report_date", "reporter", "reporter_contact"]:
         if headers[key] is None:
             raise RuntimeError(f"승인 양식의 {key} 입력란을 찾지 못했습니다.")
@@ -582,29 +627,21 @@ def generate(sid, force=False):
         root.remove(child)
     expected = []
     markers = {}
+    style_head = ET.fromstring(original['Contents/header.xml'])
+    bold_styles = {}
     for i, line in enumerate(lines):
         role = line.lstrip()[0]
         target = _styled(prototypes[role], line)
-        if bold_id:
-            for run in list(target.findall('hp:run',NS)):
-                text=''.join(run.xpath('./hp:t//text()',namespaces=NS))
-                matches=list(re.finditer('|'.join(re.escape(x) for x in sorted(emphasis,key=len,reverse=True)),text))
-                if not matches:continue
-                pos=list(target).index(run);target.remove(run);cursor=0
-                parts=[]
-                for match in matches:
-                    parts.extend([(text[cursor:match.start()],False),(match.group(),True)]);cursor=match.end()
-                parts.append((text[cursor:],False))
-                for value,is_bold in parts:
-                    if not value:continue
-                    new=ET.Element(HP+'run',attrib=dict(run.attrib))
-                    if is_bold:new.set('charPrIDRef',bold_id)
-                    ET.SubElement(new,HP+'t').text=value;target.insert(pos,new);pos+=1
+        if i < len(marked_lines):
+            apply_emphasis(target, emphasis_spans(marked_lines[i], line), style_head, bold_styles)
         expected.append(target)
         marker = f"KORDOCBODY{i:05d}TOKEN"
         prefix = BODY_PREFIXES[role]
         root.append(_styled(prototypes[role], prefix + marker))
         markers[marker] = line[len(prefix):]
+    if bold_styles:
+        original['Contents/header.xml'] = _xml(style_head)
+        entries = [(info, original['Contents/header.xml'] if info.filename == 'Contents/header.xml' else data) for info,data in entries]
     _clear_layout(root)
     DRAFT_DIR.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="kordoc-report-") as temp:
