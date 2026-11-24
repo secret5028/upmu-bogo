@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='업무보고 설치 검증 ') as temp:
         assert all(session['verification'].values()),session['verification']
         runtime=json.loads((data/'99_시스템/kordoc-runtime.json').read_text(encoding='utf-8'))
         assert Path(runtime['node'])==app/'runtime/node/node.exe'
-        assert re.search(r'font-weight="bold"[^>]*>검토목적</text>',preview)
+        assert re.search(r'font-weight="bold"[^>]*>\(검토목적\)</text>',preview)
         # A real restart must preserve the saved rule and apply it to a new report.
         subprocess.run([str(system/'taskkill.exe'),'/PID',str(pid),'/T','/F'],capture_output=True,check=True)
         pid=None
@@ -70,7 +70,7 @@ with tempfile.TemporaryDirectory(prefix='업무보고 설치 검증 ') as temp:
         fresh=request('/api/generate',{'fields':dict(fields,title='재시작 후 새 보고서')})
         assert fresh['session']['status']=='draft_ready'
         preview=opener.open(base+'/api/preview?id='+fresh['session']['id'],timeout=30).read().decode()
-        assert re.search(r'font-weight="bold"[^>]*>검토목적</text>',preview)
+        assert re.search(r'font-weight="bold"[^>]*>\(검토목적\)</text>',preview)
         print('PASS: isolated PATH; bundled Python/Node; blank settings; corpus; generate; format checks; save; preview')
     finally:
         if pid:

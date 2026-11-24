@@ -27,6 +27,7 @@ DRAFT_DIR = ROOT / "60_작성중"
 FINAL_DIR = ROOT / "70_완성문서"
 
 FIELD_LABELS = {
+    "target_pages": "목표 분량",
     "report_purpose": "보고목적",
     "title": "업무보고 제목",
     "report_date": "보고일자",
@@ -52,7 +53,7 @@ QUESTIONS = {
     "result_or_issue": "확인 결과나 문제점은 무엇인가요?",
     "action_plan": "조치사항이나 향후계획은 무엇인가요? 없다면 '해당 없음'이라고 해주세요.",
 }
-REQUIRED = [k for k in FIELD_LABELS if k not in ("report_body", "report_purpose")]
+REQUIRED = [k for k in FIELD_LABELS if k not in ("report_body", "report_purpose", "target_pages")]
 PURPOSES = ("방침필요", "상황·행사보고", "결과보고(지시사항등)", "회의자료")
 
 
@@ -492,9 +493,9 @@ def _styled(proto, text):
 
 
 def format_item_labels(body):
-    """Persisted house style: bold only text inside a leading item label."""
+    """Persisted house style: bold a leading item label including its parentheses."""
     pattern = r'^(\s*[❍○◦•-]\s*)(?:\*\*)?\(((?:\*\*)?[가-힣A-Za-z· /]{1,24}(?:\*\*)?)\)(?:\*\*)?'
-    return re.sub(pattern, lambda m: m[1]+'(**'+m[2].replace('**','')+'**)', body, flags=re.M)
+    return re.sub(pattern, lambda m: m[1]+'**('+m[2].replace('**','')+')**', body, flags=re.M)
 
 
 def emphasis_spans(marked, normalized):

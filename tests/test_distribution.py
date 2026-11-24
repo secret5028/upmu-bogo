@@ -90,7 +90,7 @@ with tempfile.TemporaryDirectory(prefix='report-install-check-') as td:
         for label in labels:
             assert ('☑' if selected==label else '☐')+' '+label in text
         assert text.count('☑') == bool(selected)
-    # Persisted rule works without markup and on fresh sessions; parentheses stay plain.
+    # Persisted rule works without markup and on fresh sessions; parentheses are bold too.
     (system/'report-memory.json').write_text(json.dumps({'formatting':{'bold_item_labels':True}}),encoding='utf-8')
     for request in ['첫 보고서','새 보고서']:
         rule_sid=call('start','--request',request)['session_id']
@@ -102,7 +102,7 @@ with tempfile.TemporaryDirectory(prefix='report-install-check-') as td:
         styles={p.get('id'):p for p in head.findall('.//hh:charPr',hn)}
         for label in ['대    상','검토목적']:
             paragraph=next(p for p in section if '('+label+')' in ''.join(p.itertext()))
-            assert boldtexts(paragraph)==label
+            assert boldtexts(paragraph)=='('+label+')'
         paragraph=next(p for p in section if '날짜' in ''.join(p.itertext()))
         assert not boldtexts(paragraph)
     invalid=subprocess.run([sys.executable,str(system/'scripts/report_loop.py'),'update','--session',sid,'--fields-json',json.dumps({'report_purpose':'알 수 없는 목적'},ensure_ascii=False)],capture_output=True)

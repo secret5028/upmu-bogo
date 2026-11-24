@@ -2,7 +2,7 @@
 
 Windows에서 기존 업무보고를 참고해 AI와 초안을 작성하고, 고정 양식의 HWPX로 저장하는 로컬 웹앱입니다.
 
-**[Windows 설치파일 다운로드](https://github.com/secret5028/upmu-bogo/releases/latest/download/UpmuBogo-Setup-0.2.3-x64.exe)** · [릴리스 및 변경사항](https://github.com/secret5028/upmu-bogo/releases)
+**[Windows 설치파일 다운로드](https://github.com/secret5028/upmu-bogo/releases/latest/download/UpmuBogo-Setup-0.2.4-x64.exe)** · [릴리스 및 변경사항](https://github.com/secret5028/upmu-bogo/releases)
 
 ## 무엇을 하는 프로그램인가요?
 
@@ -39,7 +39,7 @@ GitHub의 HWPX 파일 화면에서 **Download raw file**을 눌러 다운로드�
 ## 다운로드 및 설치
 
 1. 위 **Windows 설치파일 다운로드**를 눌러 EXE 하나를 받습니다.
-2. `UpmuBogo-Setup-0.2.3-x64.exe`를 실행하고 설치를 진행합니다.
+2. `UpmuBogo-Setup-0.2.4-x64.exe`를 실행하고 설치를 진행합니다.
 3. 바탕화면의 **업무보고 작업실** 아이콘을 실행합니다.
 4. **양식 수정**에서 보고자 정보를 입력하고 원하는 AI를 연결합니다.
 
@@ -144,3 +144,11 @@ python installer/build.py --downloads build-downloads --iscc "C:\Tools\Inno Setu
 규칙은 로컬 `data/99_시스템/report-memory.json`에 저장되어 앱을 재시작하거나 업데이트해도 유지됩니다. 새 보고서와 기존 보고서의 다음 초안 생성에 적용됩니다. 새 PC 설치 시에는 설정에서 켜세요. 기존에 저장한 HWPX 파일은 자동 변경되지 않습니다.
 
 직접 지정한 `**부분 강조**`도 지원하며, 지정한 위치의 원래 글꼴·크기에서 굵기만 변경합니다. 초안 화면에도 강조가 표시됩니다.
+
+### v0.2.4 한글 기준 목표 분량
+
+- 기본 정보에서 목표 분량을 1쪽 또는 2쪽 이내로 선택합니다.
+- 생성한 HWPX를 PC에 설치된 Windows용 한글에서 읽기 전용으로 열어 실제 쪽 수를 확인합니다. 웹 미리보기 쪽 수로 대신 판정하지 않습니다. 한글 설치 및 자동화 문서 열기 권한이 필요하며(현재 한글의 파일 접근 허용 창을 직접 승인해야 할 수 있습니다), 확인 실패 시 미확인으로 표시하고 완성본 저장을 보류합니다. 초안 다운로드는 가능합니다.
+- 목표를 초과하면 **목표 분량으로 AI 요약**을 누릅니다. 연결한 AI가 내용을 줄이고 한글 쪽 수를 다시 확인합니다(최대 3회). 결과는 검토 후 적용하며 원문을 자동 덮어쓰지 않습니다. 수치·날짜·핵심 사실은 적용 전에 확인하세요.
+- 승인 양식의 글꼴·크기·공백을 유지합니다. 항목명은 괄호까지 **(심의방법)** 형태로 굵게 표시합니다.
+- AI 연결이 없는 웹 채팅 방식에서는 분량을 줄인 답변을 가져와 다시 생성할 수 있습니다.
