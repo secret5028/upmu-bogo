@@ -105,7 +105,32 @@ with tempfile.TemporaryDirectory(prefix='report-install-check-') as td:
             assert boldtexts(paragraph)=='('+label+')'
         paragraph=next(p for p in section if '날짜' in ''.join(p.itertext()))
         assert not boldtexts(paragraph)
+    # Native HWPX objects, not detached tiny text or Unicode substitutes.
+    (system/'report-memory.json').write_text(json.dumps({'formatting':{'scan_model_style':True,'circle_font':'바탕'}}),encoding='utf-8')
+    annotated=call('start','--request','모범 서식 검증')['session_id']
+    call('update','--session',annotated,'--fields-json',json.dumps({'title':'모범 서식 검증','report_date':'2026-11-25','report_body':'□ 개요\n○ {{센터|해킹메일 열람 탐지 확인}}에서 자료^{*} 전달\n○ 보안검토^{**} **강조** 및 일반 자료*\n* 주석 설명\n※ 근거 보존'},ensure_ascii=False))
+    made=call('generate','--session',annotated)
+    assert made['status']=='draft_ready',made
+    with zipfile.ZipFile(made['draft']) as z:
+        section=ET.fromstring(z.read('Contents/section0.xml'));head=ET.fromstring(z.read('Contents/header.xml'))
+    styles={c.get('id'):c for c in head.findall('.//hh:charPr',hn)}
+    ruby=section.find('.//hp:run/hp:dutmal',ns)
+    assert ruby is not None and ruby.get('posType')=='TOP'
+    assert ruby.find('hp:mainText',ns).text=='센터' and ruby.find('hp:subText',ns).text=='해킹메일 열람 탐지 확인'
+    sup=[r.find('hp:t',ns).text for r in section.findall('.//hp:run',ns) if styles[r.get('charPrIDRef')].find('hh:supscript',hn) is not None]
+    assert sup==['*','**'],sup
+    circle=next(r for r in section.findall('.//hp:run',ns) if ''.join(r.itertext())=='○')
+    ref=styles[circle.get('charPrIDRef')].find('hh:fontRef',hn).get('hangul')
+    assert head.find('.//hh:fontface[@lang="HANGUL"]/hh:font[@id="'+ref+'"]',hn).get('face')=='바탕'
+    assert '❍' not in ''.join(section.itertext()) and '^{' not in ''.join(section.itertext())
     invalid=subprocess.run([sys.executable,str(system/'scripts/report_loop.py'),'update','--session',sid,'--fields-json',json.dumps({'report_purpose':'알 수 없는 목적'},ensure_ascii=False)],capture_output=True)
     rejected=subprocess.run([sys.executable,str(system/'scripts/report_loop.py'),'generate','--session',sid],capture_output=True)
     assert rejected.returncode != 0
+    call('update','--session',sid,'--fields-json',json.dumps({'report_purpose':'결과보고(지시사항등)','reference_body':'참고 1 상세 확인내역\n□ 세부사항\n○ (확인내용) 제공된 자료만 수록\n참고 4 추진일정\n□ 일정\n○ 후속 확인 예정'},ensure_ascii=False))
+    appendix=call('generate','--session',sid)
+    assert all(appendix['verification'].values()) and appendix['reference_count']==2
+    with zipfile.ZipFile(appendix['draft']) as z:appendix_root=ET.fromstring(z.read('Contents/section0.xml'))
+    titles=[p for p in appendix_root if ''.join(p.itertext()).strip().startswith('참고 ')]
+    assert len(titles)==2 and all(p.get('pageBreak')=='1' for p in titles)
+    assert '참고 2 추진일정' in ''.join(titles[1].itertext())
 print('PASS: fresh project, sanitized form, HWPX generation, format checks, finalize, preview')

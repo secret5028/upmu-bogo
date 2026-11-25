@@ -40,6 +40,7 @@ FIELD_LABELS = {
     "result_or_issue": "확인 결과 또는 문제점",
     "action_plan": "조치사항 또는 향후계획",
     "report_body": "구성된 보고서 본문",
+    "reference_body": "별도 참고자료",
 }
 QUESTIONS = {
     "title": "업무보고 제목은 무엇으로 할까요?",
@@ -53,7 +54,7 @@ QUESTIONS = {
     "result_or_issue": "확인 결과나 문제점은 무엇인가요?",
     "action_plan": "조치사항이나 향후계획은 무엇인가요? 없다면 '해당 없음'이라고 해주세요.",
 }
-REQUIRED = [k for k in FIELD_LABELS if k not in ("report_body", "report_purpose", "target_pages")]
+REQUIRED = [k for k in FIELD_LABELS if k not in ("report_body", "reference_body", "report_purpose", "target_pages")]
 PURPOSES = ("방침필요", "상황·행사보고", "결과보고(지시사항등)", "회의자료")
 
 
@@ -355,11 +356,11 @@ def find_header_indices(paras):
 NS = {"hp": "http://www.hancom.co.kr/hwpml/2011/paragraph", "hh": "http://www.hancom.co.kr/hwpml/2011/head"}
 HP = "{" + NS["hp"] + "}"
 APPROVED_RELATIVE = Path("50_문서템플릿/업무보고/기본 업무보고.hwpx")
-BODY_PREFIXES = {"□": "□ ", "❍": "  ❍ ", "-": "    - ", "※": "    ※ "}
+BODY_PREFIXES = {"□": "□ ", "❍": "  ❍ ", "○": "  ○ ", "-": "    - ", "※": "    ※ ", "*": "    * "}
 
 
 def direct_text(p):
-    return "".join(p.xpath("./hp:run/hp:t//text()", namespaces=NS))
+    return "".join(p.xpath("./hp:run/*[self::hp:t or self::hp:dutmal]//text()[not(ancestor::hp:subText)]", namespaces=NS))
 
 
 def visible(value):
@@ -379,15 +380,19 @@ def normalize_date(value):
     return f"{day.year}. {day.month}. {day.day}.({weekday})" + (" " + tail if tail else "")
 
 
+BODY_PREFIXES['참']='참고 '
+
 def body_lines(fields):
     if fields.get('report_body') and fields['report_body'] != '[확인 필요]':
         lines=[]
         for raw in fields['report_body'].splitlines():
             text=html.unescape(raw).strip()
             if not text:continue
-            text=re.sub(r'\*\*(.*?)\*\*',r'\1',text)
+            text=inline_parts(text)[0]
             if text.startswith('□'):lines.append('□ '+text[1:].lstrip())
-            elif text.startswith(('❍','○','◦','•')):lines.append('  ❍ '+text[1:].lstrip())
+            elif text.startswith('○'):lines.append(BODY_PREFIXES['○']+text[1:].lstrip())
+            elif text.startswith(('❍','◦','•')):lines.append('  ❍ '+text[1:].lstrip())
+            elif text.startswith('*'):lines.append(BODY_PREFIXES['*']+text[1:].lstrip())
             elif re.match(r'^[-–]\s',text):lines.append('    - '+text[1:].lstrip())
             elif text.startswith('※'):lines.append(BODY_PREFIXES['※']+text[1:].lstrip())
             else:raise ValueError('보고서 본문의 각 항목은 □, ❍, -, ※ 기호로 시작해야 합니다: '+text[:60])
@@ -411,6 +416,25 @@ def body_lines(fields):
             else:
                 lines.append("  ❍ " + re.sub(r"^[❍○◦•·]\s*", "", item))
     return lines
+
+
+def reference_lines(text):
+    """Separate text appendices; each numbered heading starts a new page."""
+    lines=[];marked=[];starts=[];number=0
+    for raw in text.splitlines():
+        raw=html.unescape(raw).strip()
+        if not raw or raw=='[확인 필요]':continue
+        match=re.match(r'^참고\s*\d+\s*[.·:：-]?\s+(.+)$',raw)
+        if match:
+            number+=1;starts.append(len(lines));line=f'참고 {number} {match[1].strip()}'
+            lines.append(line);marked.append(line)
+        else:
+            if not number:raise ValueError('참고자료는 참고 1 제목으로 시작해야 합니다.')
+            normalized=body_lines({'report_body':'□ 임시\n'+raw})[1:]
+            lines.extend(normalized);marked.append(raw)
+    if any(i+1==len(lines) or (j+1<len(starts) and starts[j+1]==i+1) for j,i in enumerate(starts)):
+        raise ValueError('참고자료 제목 아래에 실제 내용을 입력하세요.')
+    return lines,marked,starts
 
 
 def kordoc_cli(*args):
@@ -472,7 +496,7 @@ def _styled(proto, text):
     runs = p.findall("hp:run", NS)
     if any(any(c.tag != HP + "t" for c in r) for r in runs):
         raise RuntimeError("본문 원형에 개체가 포함되어 있습니다.")
-    glyph = "□" if text.startswith("□") else "❍" if text.lstrip().startswith("❍") else None
+    glyph = next((g for g in ('□','❍','○') if text.lstrip().startswith(g)),None)
     if glyph:
         symbol = next((r for r in runs if "".join(r.itertext()).strip() == glyph), None)
         if symbol is None:
@@ -492,6 +516,95 @@ def _styled(proto, text):
     return p
 
 
+ANNOTATION = re.compile(r'\^\{([^{}\r\n]+)\}|\{\{([^{}|\r\n]+)\|([^{}\r\n]+)\}\}')
+
+def inline_parts(text):
+    pattern=re.compile(r'\^\{([^{}\r\n]+)\}|\{\{([^{}|\r\n]+)\|([^{}\r\n]+)\}\}|\*\*([^*\r\n]+)\*\*')
+    parts=[];spans=[];cursor=0;length=0
+    for m in pattern.finditer(text):
+        prefix=text[cursor:m.start()];parts.append(prefix);length+=len(prefix)
+        value=m[1] if m[1] is not None else m[2] if m[2] is not None else m[4]
+        kind='sup' if m[1] is not None else 'ruby' if m[2] is not None else 'bold'
+        spans.append((length,length+len(value),kind,m[3]));parts.append(value);length+=len(value);cursor=m.end()
+    parts.append(text[cursor:]);return ''.join(parts),spans
+
+def annotation_plain(text):
+    return ANNOTATION.sub(lambda m:m[1] if m[1] is not None else m[2],text)
+
+def mapped_spans(marked,normalized):
+    plain,spans=inline_parts(marked)
+    source=1+len(plain[1:])-len(plain[1:].lstrip())
+    pos=len(normalized)-len(normalized.lstrip())+1
+    target=pos+len(normalized[pos:])-len(normalized[pos:].lstrip())
+    return [(max(a,source)-source+target,b-source+target,kind,sub) for a,b,kind,sub in spans if b>source]
+
+def apply_annotations(paragraph, marked, normalized, head, cache):
+    spans=[s for s in mapped_spans(marked,normalized) if s[2]!='bold']
+    props=head.find('.//hh:charProperties',NS);offset=0
+    for run in list(paragraph.findall('hp:run',NS)):
+        text=''.join(run.xpath('./hp:t//text()',namespaces=NS));end=offset+len(text)
+        hits=[s for s in spans if s[0]<end and s[1]>offset]
+        if not hits:offset=end;continue
+        if any(a<offset or b>end for a,b,_,_ in hits):
+            raise ValueError('덧말·위첨자 내부에 굵게 경계를 넣지 마세요. 강조는 전체 구절에 적용하세요.')
+        cuts=sorted({0,len(text)}|{v-offset for a,b,_,_ in hits for v in (a,b)})
+        index=list(paragraph).index(run);paragraph.remove(run)
+        for a,b in zip(cuts,cuts[1:]):
+            new=ET.Element(HP+'run',attrib=dict(run.attrib));t=ET.SubElement(new,HP+'t')
+            hit=next((s for s in hits if s[0]==offset+a and s[1]==offset+b),None)
+            if hit and hit[2]=='ruby':
+                new.remove(t)
+                ruby=ET.SubElement(new,HP+'dutmal',posType='TOP',szRatio='50',option='0',styleIDRef='0',align='CENTER')
+                ET.SubElement(ruby,HP+'mainText').text=text[a:b]
+                ET.SubElement(ruby,HP+'subText').text=hit[3]
+            else:
+                t.text=text[a:b]
+                if hit:
+                    key=('sup',run.get('charPrIDRef'))
+                    if key not in cache:
+                        c=deepcopy(next(c for c in props if c.get('id')==key[1]));identifier=str(max(int(c.get('id')) for c in props)+1)
+                        c.set('id',identifier)
+                        if c.find('hh:supscript',NS) is None:ET.SubElement(c,'{'+NS['hh']+'}supscript')
+                        props.append(c);props.set('itemCnt',str(len(props)));cache[key]=identifier
+                    new.set('charPrIDRef',cache[key])
+            paragraph.insert(index,new);index+=1
+        offset=end
+
+def circle_prototype(prototype, head, font_name):
+    p=deepcopy(prototype);props=head.find('.//hh:charProperties',NS)
+    r=next(r for r in p.findall('hp:run',NS) if ''.join(r.itertext()).strip()=='❍')
+    r.find('hp:t',NS).text='○'
+    c=deepcopy(next(c for c in props if c.get('id')==r.get('charPrIDRef')))
+    c.set('id',str(max(int(x.get('id')) for x in props)+1))
+    refs=c.find('hh:fontRef',NS)
+    for face in head.findall('.//hh:fontface',NS):
+        font=next((f for f in face if f.get('face')==font_name),None)
+        if font is None:
+            font=deepcopy(face[0]);font.set('id',str(max(int(f.get('id')) for f in face)+1));font.set('face',font_name)
+            face.append(font);face.set('fontCnt',str(len(face)))
+        refs.set(face.get('lang').lower(),font.get('id'))
+    bold=c.find('hh:bold',NS)
+    if bold is not None:c.remove(bold)
+    props.append(c);props.set('itemCnt',str(len(props)));r.set('charPrIDRef',c.get('id'))
+    return p
+
+def model_prototype(prototype, role, head):
+    """Saved scan-derived profile; separate from the original approved defaults."""
+    p=deepcopy(prototype);props=head.find('.//hh:charProperties',NS)
+    paras=head.find('.//hh:paraProperties',NS)
+    para=deepcopy(next(c for c in paras if c.get('id')==p.get('paraPrIDRef')))
+    para.set('id',str(max(int(c.get('id')) for c in paras)+1))
+    for e in para.iter():
+        if ET.QName(e).localname=='lineSpacing':e.set('value','170' if role in ('□','○','❍') else '150')
+    paras.append(para);paras.set('itemCnt',str(len(paras)));p.set('paraPrIDRef',para.get('id'))
+    for r in p.findall('hp:run',NS):
+        c=deepcopy(next(c for c in props if c.get('id')==r.get('charPrIDRef')))
+        c.set('id',str(max(int(x.get('id')) for x in props)+1))
+        c.set('height',str({'□':1600,'○':1400,'❍':1400,'-':1200,'※':1000,'*':1000}[role]))
+        if ''.join(r.itertext()).strip()=='○':c.set('height','1200')
+        props.append(c);props.set('itemCnt',str(len(props)));r.set('charPrIDRef',c.get('id'))
+    return p
+
 def format_item_labels(body):
     """Persisted house style: bold a leading item label including its parentheses."""
     pattern = r'^(\s*[❍○◦•-]\s*)(?:\*\*)?\(((?:\*\*)?[가-힣A-Za-z· /]{1,24}(?:\*\*)?)\)(?:\*\*)?'
@@ -499,19 +612,7 @@ def format_item_labels(body):
 
 
 def emphasis_spans(marked, normalized):
-    """Map only explicitly marked occurrences onto normalized body offsets."""
-    spans=[]; parts=[]; cursor=0; length=0
-    for match in re.finditer(r'\*\*([^*\r\n]+)\*\*', marked):
-        prefix=marked[cursor:match.start()];parts.append(prefix);length+=len(prefix)
-        value=match.group(1);spans.append((length,length+len(value)))
-        parts.append(value);length+=len(value);cursor=match.end()
-    parts.append(marked[cursor:]);plain=''.join(parts)
-    # Prefix spacing is normalized; never replace the approved marker font.
-    source_start=1+len(plain[1:])-len(plain[1:].lstrip())
-    marker_pos=normalized.index(normalized.lstrip()[0])
-    target_start=marker_pos+1+len(normalized[marker_pos+1:])-len(normalized[marker_pos+1:].lstrip())
-    return [(max(a,source_start)-source_start+target_start,b-source_start+target_start)
-            for a,b in spans if b>source_start]
+    return [(a,b) for a,b,kind,sub in mapped_spans(marked,normalized) if kind=='bold']
 
 
 def apply_emphasis(paragraph, spans, head, cache):
@@ -557,6 +658,12 @@ def generate(sid, force=False):
     if formatting.get('bold_item_labels', False):
         fields['report_body'] = format_item_labels(fields.get('report_body',''))
     lines = body_lines(fields)
+    main_count=len(lines)
+    reftext=session['fields'].get('reference_body','')
+    if formatting.get('bold_item_labels',False):reftext=format_item_labels(reftext)
+    reflines,refmarked,refstarts=reference_lines(reftext)
+    lines+=reflines
+    reference_starts={main_count+i for i in refstarts}
     # A single explicitly approved form prevents unrelated forms from silently changing fonts.
     template = ROOT / APPROVED_RELATIVE
     with zipfile.ZipFile(template) as z:
@@ -575,9 +682,11 @@ def generate(sid, force=False):
     # The approved form has no dedicated note style. Reuse its detail font,
     # paragraph spacing and indentation, keeping the literal ※ character.
     prototypes['※'] = prototypes['-']
+    prototypes['*'] = prototypes['-']
     marked_lines = [html.unescape(x).strip() for x in fields.get('report_body','').splitlines() if x.strip()]
     if formatting.get('bold_item_labels', False) and not fields.get('report_body','').strip():
         marked_lines = [format_item_labels(line) for line in lines]
+    marked_lines=marked_lines[:main_count]+refmarked
     for key in ["title", "report_date", "reporter", "reporter_contact"]:
         if headers[key] is None:
             raise RuntimeError(f"승인 양식의 {key} 입력란을 찾지 못했습니다.")
@@ -629,18 +738,28 @@ def generate(sid, force=False):
     expected = []
     markers = {}
     style_head = ET.fromstring(original['Contents/header.xml'])
+    prototypes['○'] = circle_prototype(prototypes['❍'],style_head,formatting.get('circle_font','바탕'))
+    if formatting.get('scan_model_style',False):
+        prototypes={role:model_prototype(proto,role,style_head) for role,proto in prototypes.items()}
+    refproto=deepcopy(prototypes['□'])
+    run=max(refproto.findall('hp:run',NS),key=lambda r:len(''.join(r.itertext()).strip()))
+    for child in list(refproto):refproto.remove(child)
+    refproto.append(deepcopy(run))
+    prototypes['참']=refproto
     bold_styles = {}
     for i, line in enumerate(lines):
         role = line.lstrip()[0]
         target = _styled(prototypes[role], line)
         if i < len(marked_lines):
             apply_emphasis(target, emphasis_spans(marked_lines[i], line), style_head, bold_styles)
+            apply_annotations(target, marked_lines[i], line, style_head, bold_styles)
+        if i in reference_starts:target.set('pageBreak','1')
         expected.append(target)
         marker = f"KORDOCBODY{i:05d}TOKEN"
         prefix = BODY_PREFIXES[role]
         root.append(_styled(prototypes[role], prefix + marker))
         markers[marker] = line[len(prefix):]
-    if bold_styles:
+    if bold_styles or formatting.get('scan_model_style',False) or any(line.lstrip().startswith('○') for line in lines):
         original['Contents/header.xml'] = _xml(style_head)
         entries = [(info, original['Contents/header.xml'] if info.filename == 'Contents/header.xml' else data) for info,data in entries]
     _clear_layout(root)
@@ -714,7 +833,7 @@ def generate(sid, force=False):
               "session_id": sid, "draft": str(draft), "template": str(template),
               "engine": "kordoc 4.24.70 + approved-format restoration",
               "verification": verification, "visual_verification": "한글 화면 줄바꿈·쪽 나눔 확인 필요",
-              "body_paragraphs": len(lines), "kordoc_applied": patch_result.get("applied")}
+              "body_paragraphs": main_count, "reference_count": len(refstarts), "total_paragraphs": len(lines), "kordoc_applied": patch_result.get("applied")}
     result["draft_sha256"] = hashlib.sha256(draft.read_bytes()).hexdigest()
     draft.with_suffix(".verification.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     session.update({k: v for k, v in result.items() if k != "template"})
