@@ -1,0 +1,173 @@
+diff --git a/src/render/html.ts b/src/render/html.ts
+index fa537aa..77219d6 100644
+--- a/src/render/html.ts
++++ b/src/render/html.ts
+@@ -6,6 +6,7 @@
+ 
+ import type { RenderScene } from "./scene.js"
+ import { escapeXml } from "./svg-render.js"
++import { localHumanFontCss } from "./local-font.js"
+ 
+ export interface SceneHtmlOptions {
+   /** <title> — 기본 "kordoc" */
+@@ -17,13 +18,15 @@ export interface SceneHtmlOptions {
+  * @param pageSvgs 페이지 번호 → standalone SVG (선택된 페이지만 있어도 된다 — 있는 페이지만 방출)
+  */
+ export function renderSceneToHtml(scene: RenderScene, pageSvgs: Map<number, string>, options: SceneHtmlOptions = {}): string {
++  const localFont = localHumanFontCss()
+   const title = escapeXml(options.title ?? "kordoc")
+   const first = scene.pages.find(p => pageSvgs.has(p.page)) ?? scene.pages[0]
+   const pageSize = first ? `${first.width}pt ${first.height}pt` : "auto"
+   const pages = [...pageSvgs.keys()].sort((a, b) => a - b).map(n => {
+     const meta = scene.pages.find(p => p.page === n)
+     const size = meta ? ` style="width:${meta.width}pt;height:${meta.height}pt"` : ""
+-    return `<div class="kordoc-page" data-page="${n}"${size}>${pageSvgs.get(n)}</div>`
++    const svg = localFont ? pageSvgs.get(n)?.replaceAll("'휴먼명조'", "'Kordoc Local Human'") : pageSvgs.get(n)
++    return `<div class="kordoc-page" data-page="${n}"${size}>${svg}</div>`
+   })
+   return `<!doctype html>
+ <html lang="ko">
+@@ -33,6 +36,7 @@ export function renderSceneToHtml(scene: RenderScene, pageSvgs: Map<number, stri
+ <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+ <title>${title}</title>
+ <style>
++${localFont}
+ html, body { margin: 0; background: #e9e8e6; }
+ .kordoc-document { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 16px 0; }
+ .kordoc-page { position: relative; background: white; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+diff --git a/src/render/para-model.ts b/src/render/para-model.ts
+index 338e675..b436c72 100644
+--- a/src/render/para-model.ts
++++ b/src/render/para-model.ts
+@@ -43,7 +43,7 @@ export interface Seg { textpos: number; vertpos: number; horzpos: number; horzsi
+  * ctrlText: 컨트롤이 그리는 글(주석 머리 번호 "1)" 등 hp:autoNum, 각주·미주 본문 참조 번호) — 줄 채우기에서 그 글의 폭을 차지한다.
+  * ctrlSup: 그 글을 위첨자 크기로 잰다(각주·미주 본문 참조 번호). fieldEnd: 필드 끝 컨트롤 — 넘친 줄에도 그 줄 끝에 붙는다.
+  * tabRight: 오른쪽 탭(hp:tab type 2) — 그 뒤 글은 탭 자리에 맞춰 놓인다 */
+-export interface ParaChar { ch: string; prId: string | null; tab?: boolean; tabW?: number; tabRight?: boolean; nb?: boolean; ctrl?: boolean; br?: boolean; ctrlText?: string; ctrlSup?: boolean; fieldEnd?: boolean; note?: Element }
++export interface ParaChar { ch: string; prId: string | null; tab?: boolean; tabW?: number; tabRight?: boolean; nb?: boolean; ctrl?: boolean; br?: boolean; ctrlText?: string; ctrlSup?: boolean; fieldEnd?: boolean; note?: Element; ruby?: { text: string; ratio: number; position: string; align: string } }
+ 
+ /** 렌더 대상 개체 태그 — 이 외(도형류)는 경고 후 생략 */
+ /** 양식 컨트롤 — 글자처럼 취급하면 그 크기로 줄을 차지한다(한컴 저장본: 체크 상자 높이 1984 줄 = 1984, 기준선 85%) */
+@@ -217,6 +217,15 @@ export function buildPara(p: Element): ParaModel {
+           else {
+             const slot = chars[chars.length - 8]
+             slot.ctrl = true
++            if (cn === "dutmal" && !deleted) {
++              slot.ctrlText = findChildByLocalName(ch, "mainText")?.textContent ?? ""
++              slot.ruby = {
++                text: findChildByLocalName(ch, "subText")?.textContent ?? "",
++                ratio: Math.max(1, Math.min(100, num(ch, "szRatio", 50))),
++                position: ch.getAttribute("posType") ?? "TOP",
++                align: ch.getAttribute("align") ?? "CENTER",
++              }
++            }
+             const an = cn === "ctrl" ? findChildByLocalName(ch, "autoNum") : null
+             // 각주·미주 본문 참조 번호("1)", "문9）")는 위첨자 크기로 그 글 폭을 차지한다 — 구역 번호 모양의 supscript 값과 무관
+             // (한컴 저장 lineseg: 위첨자로 재면 두 줄 이상 문단 줄 시작 일치 +201, 본래 크기면 +173)
+diff --git a/src/render/reflow.ts b/src/render/reflow.ts
+index 37d5b0d..e0233d9 100644
+--- a/src/render/reflow.ts
++++ b/src/render/reflow.ts
+@@ -263,7 +263,7 @@ function reflowPara(
+         // 주석 머리 번호("17)")에는 자간을 매기지 않는다(한글 2022 줄 나눔: 바탕 9pt 자간 −5 각주 130개 — 자간을 넣으면 두 자리 번호 문단이 한 글자 더 든다)
+         const st1 = c.ctrlSup ? st1a : { ...st1a, spacing: 0, ...(st1a.latin ? { latin: { ...st1a.latin, spacing: 0 } } : {}) }
+         // 각주·미주 본문 참조 번호는 글자 크기의 3/4 로 잰다(한글 2022 줄 나눔: 번호 1~3자리 모두 75~77% 에서 맞는다. 위첨자 16/25 는 좁다)
+-        const st = c.ctrlSup ? { ...st1, height: mulDiv(st1.height, 3, 4) } : st1
++        const st = c.ruby ? st0 : c.ctrlSup ? { ...st1, height: mulDiv(st1.height, 3, 4) } : st1
+         for (const ch of c.ctrlText) w += glyphWidth(ch, st).w
+       }
+       realIdx.push(i); widths.push(w); spacings.push(0); text += w > 0 ? "\ufffc" : c.fieldEnd ? "\ufdd0" : "\u2060"; x += w
+@@ -670,11 +670,14 @@ function reflowPara(
+     // 기준선도 그 둘로(2414 × 85% = 2052)
+     const endH = li === wrap.starts.length - 1 && lineObjH[li] > 0 && lineObjH[li] < textH && !m.chars.slice(textposOf[li]).some(c => c.ch && c.ch.trim() !== "") &&
+       m.objs.some(o => o.inline && o.tag === "tbl" && lineOf(o.index) === li) ? heightOf(m.runs[m.runs.length - 1]?.prId ?? null) : -1
+-    const lineH = objOnly ? lineObjH[li] : endH >= 0 ? Math.max(lineObjH[li], endH) : Math.max(textH, lineObjH[li])
++    const rubySlots = m.chars.slice(textposOf[li], textposOf[li + 1] ?? m.chars.length).filter(c => c.ruby?.text)
++    const rubyTop = Math.max(0, ...rubySlots.filter(c => c.ruby!.position === "TOP").map(c => Math.round(heightOf(c.prId) * c.ruby!.ratio / 100)))
++    const rubyBottom = Math.max(0, ...rubySlots.filter(c => c.ruby!.position === "BOTTOM").map(c => Math.round(heightOf(c.prId) * c.ruby!.ratio / 100)))
++    const lineH = (objOnly ? lineObjH[li] : endH >= 0 ? Math.max(lineObjH[li], endH) : Math.max(textH, lineObjH[li])) + rubyTop + rubyBottom
+     // 줄간격 100% 미만이면 음수 — 다음 줄·문단이 그만큼 겹쳐 올라온다. '줄 간격에 영향' 개체 줄은 개체까지 든 줄 높이로
+     // (한컴 저장본: 140% 문단의 표 줄 60333 → spacing 24132, 그 표 아닌 개체 줄은 글자 높이 1300 → 520)
+     // 고정 줄 간격은 개체 줄도 그 간격만 나아간다(한컴 저장본: 고정 1800 문단의 표 줄 20500 → spacing −18700)
+-    const spBase = lineObjLs[li] || geom.lineSpacingType === "FIXED" ? lineH : textH
++    const spBase = lineObjLs[li] || geom.lineSpacingType === "FIXED" ? lineH : textH + rubyTop + rubyBottom
+     const spacing = pitchFor(spBase, geom) - spBase
+     if (band && v < band[1] && v + lineH > band[0]) v = band[1]
+     // 이 줄에 앵커된(첫 줄이 아니면) 위아래 배치 개체는 줄 위에 끼고 줄은 그 아래 — 첫 줄 앵커는 종전대로 문단 위를 차지
+@@ -697,6 +700,7 @@ function reflowPara(
+     // 위 정렬이면 0(한컴 저장본: 세로 정렬 TOP 문단의 줄 668개 모두 baseline 0)
+     seg.setAttribute("baseline", String(geom.vertAlign === "TOP" ? 0 : geom.vertAlign === "CENTER" || verticalCenter && (!geom.vertAlign || geom.vertAlign === "BASELINE") ? Math.floor(lineH / 2) : geom.vertAlign === "BOTTOM" ? lineH : endH >= 0 ? Math.max(Math.round(endH * BASELINE_RATIO), lineObjAsc[li]) : Math.max(fl ? fl[1] : Math.round(textH0 * BASELINE_RATIO), boxTop > textH0 ? Math.round(boxTop * BASELINE_RATIO) : 0, lineObjAsc[li])))
+     seg.setAttribute("spacing", String(spacing))
++    if (rubyTop) seg.setAttribute("baseline", String(Number(seg.getAttribute("baseline")) + rubyTop))
+     let box = boxAt(li)
+     // 한 줄 문단이 양쪽에 빈 자리를 남긴 어울림 개체 옆에 오고 글이 왼쪽 조각에 다 들면, 왼쪽 조각에 두고 남은 조각마다
+     // 문단 끝 다음 자리의 빈 조각을 둔다(한컴 저장본: 그림 양옆 빈 문단 [0, 왼쪽] [1, 오른쪽], "   - QR코드" [0, 왼쪽] [10, 오른쪽] — 같은 vertpos)
+diff --git a/src/render/svg-content.ts b/src/render/svg-content.ts
+index 297de91..ed3de38 100644
+--- a/src/render/svg-content.ts
++++ b/src/render/svg-content.ts
+@@ -144,6 +144,7 @@ interface LinePlan {
+ 
+ function charW(c: ParaChar, styles: RenderStyles, prev?: ParaChar): number {
+   const st = (c.prId != null ? styles.charPr.get(c.prId) : undefined) ?? DEFAULT_CHAR
++  if (c.ruby && c.ctrlText) return [...c.ctrlText].reduce((w, ch) => w + glyphWidth(ch, st).w, 0)
+   if (c.ch === "" && c.ctrlText) return measureTextWidth(c.ctrlText, c.ctrlSup ? Math.round(st.height * 3 / 4) : st.height, st.ratio, { spacingPct: st.spacing, faceClass: faceClassOf(st.face) })
+   // 글자 폭은 reflow 와 같은 한컴 폭 — 언어별(영문) 글꼴·장평·상대크기, 4 단위 양자화, 첨자 16/25, 합성 굵기.
+   // 옛한글 자모는 reflow 와 같이 앞 자모에 합쳐 잰다
+@@ -357,12 +358,29 @@ export function drawPara(p: Element, ox: number, oy: number, areaW: number, ctx:
+         if (ct) {
+           const cs0 = (m.chars[i].prId != null ? ctx.styles.charPr.get(m.chars[i].prId!) : undefined) ?? DEFAULT_CHAR
+           const sup = !!m.chars[i].ctrlSup, fh = sup ? Math.round(cs0.height * 16 / 25) : cs0.height
+-          const cw = measureTextWidth(ct, sup ? Math.round(cs0.height * 3 / 4) : fh, cs0.ratio, { spacingPct: cs0.spacing, faceClass: faceClassOf(cs0.face) })
+-          const attrs = [`x="${pt(cursor)}"`, `y="${pt(glyphY(cs0.height) - (sup ? Math.round(cs0.height * 0.35) : 0))}"`, `font-size="${pt(fh)}"`]
++          const ruby = m.chars[i].ruby
++          const cw = ruby ? charW(m.chars[i], ctx.styles) : measureTextWidth(ct, sup ? Math.round(cs0.height * 3 / 4) : fh, cs0.ratio, { spacingPct: cs0.spacing, faceClass: faceClassOf(cs0.face) })
++          const attrs = [`x="${pt(cursor)}"`, `y="${pt(glyphY(cs0.height) - (sup ? Math.round(cs0.height * 0.35) : 0))}"`, `font-size="${pt(fh)}"`, 'style="white-space:pre"']
+           if (cs0.fontFamily) attrs.push(`font-family="${escapeXml(cs0.fontFamily)}"`)
+           if (cs0.color) attrs.push(`fill="${escapeXml(cs0.color)}"`)
++          if (ruby && cs0.bold) attrs.push('font-weight="bold"')
++          if (ruby && cs0.italic) attrs.push('font-style="italic"')
++          if (ruby && cw > 0) attrs.push(`textLength="${pt(cw * plan.scale)}"`, 'lengthAdjust="spacing"')
+           emit(ctx, `<text ${attrs.join(" ")}>${escapeXml(ct)}</text>`)
+           ctx.stats.texts++
++          if (ruby?.text) {
++            const rh = Math.round(cs0.height * ruby.ratio / 100)
++            const rw = [...ruby.text].reduce((w, ch) => w + glyphWidth(ch, { ...cs0, height: rh, bold: false }).w, 0)
++            const rx = cursor + (ruby.align === "LEFT" ? 0 : ruby.align === "RIGHT" ? cw * plan.scale - rw : (cw * plan.scale - rw) / 2)
++            // Top ruby baselines are about 0.91 em above the main baseline
++            // in the Hancom reference PDF (14 pt main: 12.72 pt offset).
++            const ry = glyphY(cs0.height) + (ruby.position === "BOTTOM" ? rh : -cs0.height * 0.91)
++            const ra = [`x="${pt(rx)}"`, `y="${pt(ry)}"`, `font-size="${pt(rh)}"`, `textLength="${pt(rw)}"`, 'lengthAdjust="spacing"']
++            if (cs0.fontFamily) ra.push(`font-family="${escapeXml(cs0.fontFamily)}"`)
++            if (cs0.color) ra.push(`fill="${escapeXml(cs0.color)}"`)
++            emit(ctx, `<text ${ra.join(" ")}>${escapeXml(ruby.text)}</text>`)
++            ctx.stats.texts++
++          }
+           cursor += cw * plan.scale
+         }
+         if (m.chars[i].tab) cursor += plan.tabs.get(i) ?? 0
+@@ -413,7 +431,7 @@ export function drawPara(p: Element, ox: number, oy: number, areaW: number, ctx:
+           emit(ctx, `<rect x="${pt(cx)}" y="${pt(oy + seg.vertpos)}" width="${pt(sw)}" height="${pt(seg.textheight)}" fill="#ffd54f" fill-opacity="0.45"/>`)
+         }
+         if (text.trim().length > 0) {
+-          const attrs: string[] = [`x="${pt(cx)}"`, `y="${pt(glyphY(st.height) - raise)}"`, `font-size="${pt(fh)}"`]
++          const attrs: string[] = [`x="${pt(cx)}"`, `y="${pt(glyphY(st.height) - raise)}"`, `font-size="${pt(fh)}"`, 'style="white-space:pre"']
+           if (st.fontFamily) attrs.push(`font-family="${escapeXml(st.fontFamily)}"`)
+           if ([...text].length > 1 && sw > 50) {
+             attrs.push(`textLength="${pt(sw)}"`, `lengthAdjust="${scale < 1 ? "spacingAndGlyphs" : "spacing"}"`)
+diff --git a/src/render/svg-render.ts b/src/render/svg-render.ts
+index d825d63..e16a3b7 100644
+--- a/src/render/svg-render.ts
++++ b/src/render/svg-render.ts
+@@ -81,7 +81,10 @@ export interface RenderSvgResult {
+ // ─── 표 ───────────────────────────────────────────
+ 
+ function edgeLine(x1: number, y1: number, x2: number, y2: number, e: RenderBorderEdge): string {
+-  const dash = /DASH|DOT/.test(e.type) ? ` stroke-dasharray="${e.type.includes("DOT") ? "1,1.5" : "3,1.5"}"` : ""
++  // Hancom PDF comparison: a 0.12 mm DASH border has 0.48 pt marks and
++  // 0.72 pt gaps, not the former fixed 3 pt marks. Scale with stroke width.
++  const dash = e.type === "DASH" ? ` stroke-dasharray="${(e.widthPt * 1.4).toFixed(3)},${(e.widthPt * 2.1).toFixed(3)}"`
++    : /DASH|DOT/.test(e.type) ? ` stroke-dasharray="${e.type.includes("DOT") ? "1,1.5" : "3,1.5"}"` : ""
+   return `<line x1="${pt(x1)}" y1="${pt(y1)}" x2="${pt(x2)}" y2="${pt(y2)}" stroke="${escapeXml(e.color)}" stroke-width="${e.widthPt.toFixed(2)}"${dash}/>`
+ }
+ 

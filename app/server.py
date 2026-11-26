@@ -48,7 +48,8 @@ PROGRESS_PLANS = {
     '/api/save': ['작성내용 확인', '작성내용 저장'],
     '/api/upload': ['파일 수신', '원본 파일 저장', '자료 텍스트 추출', '참조자료 등록'],
     '/api/ai': ['자료·대화 준비', 'AI 응답 대기', '응답 정리·대화 저장'],
-    '/api/generate': ['입력내용 확인·저장', 'HWPX 생성·서식 검증', '한글 출력·분량 자동 판단', '1차 요약·출력 확인', '2차 요약·출력 확인', '3차 요약·출력 확인', '최종 한글 출력 확인'],
+    '/api/generate': ['입력내용 확인·저장', 'HWPX 생성·서식 검증', '미리보기·분량 자동 판단', '1차 요약·출력 확인', '2차 요약·출력 확인', '3차 요약·출력 확인', '최종 미리보기 확인'],
+    '/api/verify-native': ['한글 문서 열기·실제 쪽 수 확인·PDF 저장'],
     '/api/fit': ['현재 분량 측정','1차 요약·출력 확인','2차 요약·출력 확인','3차 요약·출력 확인','요약안 준비'],
     '/api/finalize': ['초안 검토 확인', '완성본 생성·검증', '지정 폴더 저장'],
 }
@@ -435,15 +436,26 @@ def artifact(sid,kind='draft'):
         raise ValueError('파일이 생성 후 변경됐습니다. 초안을 다시 생성하세요.')
     return p
 
-def preview(sid):
-    p=artifact(sid)
-    digest=hashlib.sha256(p.read_bytes()).hexdigest()
+RENDER_REVISION='4.25.20-upmu.1'
+
+def kordoc_preview(path):
+    digest=hashlib.sha256(Path(path).read_bytes()).hexdigest()
     folder=PROJECT/'99_시스템/웹미리보기';folder.mkdir(parents=True,exist_ok=True)
-    target=folder/f'{digest}.svg'
-    if not target.exists():
+    bridge_hash=hashlib.sha256((HERE/'render-preview.mjs').read_bytes()).hexdigest()[:10]
+    target=folder/f'{digest}-{RENDER_REVISION}-{bridge_hash}.html'
+    metadata=target.with_suffix('.json')
+    if not target.exists() or not metadata.exists():
         cfg=json.loads((PROJECT/'99_시스템/kordoc-runtime.json').read_text(encoding='utf-8'))
-        run([cfg['node'],cfg['cli'],'render',str(p),'-o',str(target),'--silent'])
-    return target
+        result=json.loads(run([cfg['node'],str(HERE/'render-preview.mjs'),cfg['cli'],str(path),str(target)]))
+        if result.get('pages',0)<1:raise ValueError('미리보기 페이지가 없습니다.')
+        metadata.write_text(json.dumps(result),encoding='utf-8')
+    return target,json.loads(metadata.read_text(encoding='utf-8'))
+
+def kordoc_pages(path):
+    return kordoc_preview(path)[1]['pages']
+
+def preview(sid):
+    return kordoc_preview(artifact(sid))[0]
 
 
 def hancom_pages(path):
@@ -480,21 +492,21 @@ try {
     return int(result.stdout.strip())
 
 
-def page_assessment(hwpx_path, target):
+def page_assessment(hwpx_path, target, native=False):
     mode=target
     target=2 if mode=='auto' else int(target)
-    try:count=hancom_pages(hwpx_path)
+    try:count=hancom_pages(hwpx_path) if native else kordoc_pages(hwpx_path)
     except subprocess.TimeoutExpired:
-        return {'pages':None,'target':int(target),'fits':None,'basis':'한글 확인 대기',
+        return {'pages':None,'target':int(target),'fits':None,'basis':'한글 확인 대기' if native else '미리보기 확인 대기',
                 'message':'한글 실제 쪽 수 확인 시간이 초과되었습니다. 한글 창의 파일 접근 허용 여부를 확인한 뒤 다시 생성하세요. HWPX 초안은 저장되어 있습니다.'}
     except (ValueError,OSError,subprocess.TimeoutExpired) as e:
-        return {'pages':None,'target':int(target),'fits':None,'basis':'한글 확인 대기',
-                'message':'한글 실제 쪽 수 미확인 · '+str(e)}
+        return {'pages':None,'target':int(target),'fits':None,'basis':'한글 확인 대기' if native else '미리보기 확인 대기',
+                'message':('한글 쪽 수 미확인 · ' if native else '미리보기 생성 실패 · ')+str(e)}
     reason=''
     if mode=='auto':
         target=1 if count==1 else 2
-        reason='본문이 한글 1쪽에 수록됨' if count==1 else '본문 분량상 2쪽 구성'
-        if count==2 and PROJECT:
+        reason='본문이 1쪽에 수록됨' if count==1 else '본문 분량상 2쪽 구성'
+        if count==2 and PROJECT and native:
             pdf=PROJECT/'99_시스템/웹미리보기'/(hashlib.sha256(Path(hwpx_path).read_bytes()).hexdigest()+'.pdf')
             if pdf.exists():
                 try:
@@ -504,14 +516,21 @@ def page_assessment(hwpx_path, target):
                     if len(pages)==2 and 0<len(tail)<=250:
                         target=1;reason='두 번째 쪽에 짧게 넘친 내용을 1쪽으로 정리'
                 except Exception:pass
-    return {'pages':count,'target':int(target),'mode':mode,'reason':reason,'fits':count<=int(target),'basis':'한글 실제 문서',
+    if mode=='auto' and count==2 and not native:
+        tail=kordoc_preview(hwpx_path)[1].get('tail_chars',0)
+        if 0<tail<=250:target=1;reason='두 번째 쪽에 짧게 넘친 내용을 1쪽으로 정리'
+    basis='한글 실제 문서' if native else 'kordoc 보완 미리보기'
+    return {'pages':count,'target':int(target),'mode':mode,'reason':reason,'fits':count<=int(target),'basis':basis,
             'verified_sha256':hashlib.sha256(Path(hwpx_path).read_bytes()).hexdigest(),
             'verification_session':PAGE_SESSION,
-            'message':('자동 판단 · ' if mode=='auto' else '')+f'목표 {target}쪽 이내 · 한글 실제 {count}쪽'+(' · 분량 초과' if count>int(target) else ' · 분량 충족')}
+            'message':('자동 판단 · ' if mode=='auto' else '')+f'목표 {target}쪽 이내 · {basis} {count}쪽'+(' · 분량 초과' if count>int(target) else ' · 분량 충족')}
 
 
 def verified_assessment(s):
     path=artifact(s['id'])
+    native=webdata(s['id']).get('native_assessment') or {}
+    if native.get('verified_sha256')==hashlib.sha256(path.read_bytes()).hexdigest() and native.get('pages') is not None:
+        return native
     previous=webdata(s['id']).get('page_assessment') or {}
     if (previous.get('verification_session')==PAGE_SESSION
             and (previous.get('mode')=='auto' if s['fields'].get('target_pages')=='auto' else previous.get('target')==int(s['fields'].get('target_pages','1')))
@@ -520,18 +539,18 @@ def verified_assessment(s):
     return assess_report(path,s['fields'])
 
 
-def assess_report(path,fields):
+def assess_report(path,fields,native=False):
     if not fields.get('reference_body','').strip():
-        return page_assessment(path,fields.get('target_pages','auto'))
-    assessment=measure_fields(fields)
+        return page_assessment(path,fields.get('target_pages','auto'),native=native)
+    assessment=measure_fields(fields,native=native)
     # Export the full report separately; body-only measurement defines the limit.
-    total=hancom_pages(path)
+    total=hancom_pages(path) if native else kordoc_pages(path)
     assessment.update(total_pages=total,verified_sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest())
     assessment['message']+=' · 참고자료 포함 전체 '+str(total)+'쪽'
     return assessment
 
 
-def measure_fields(fields):
+def measure_fields(fields,native=False):
     fields=dict(fields,reference_body='')
     """Use the same engine/form in a disposable project; never replace a user's draft."""
     with tempfile.TemporaryDirectory(prefix='report-pages-') as temporary:
@@ -549,7 +568,7 @@ def measure_fields(fields):
         call('update','--session',sid,'--fields-json',json.dumps(fields,ensure_ascii=False))
         made=call('generate','--session',sid)
         if made['status']!='draft_ready':raise ValueError('분량 검증용 문서의 서식 검사 실패')
-        return page_assessment(made['draft'],fields['target_pages'])
+        return page_assessment(made['draft'],fields['target_pages'],native=native)
 
 
 def fit_draft(data):
@@ -690,7 +709,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length',str(len(data)))
         self.send_header('Cache-Control','no-store')
         self.send_header('X-Content-Type-Options','nosniff')
-        self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
+        policy=("default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self'"
+                if urlparse(self.path).path=='/api/preview' else
+                "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
+        self.send_header('Content-Security-Policy',policy)
         for k,v in (extra or {}).items():self.send_header(k,v)
         self.end_headers();self.wfile.write(data)
     def guard(self,write=False):
@@ -732,7 +754,7 @@ class Handler(BaseHTTPRequestHandler):
                 pdf=PROJECT/'99_시스템/웹미리보기'/f'{digest}.pdf'
                 if not pdf.exists():raise ValueError('한글 실제 출력 PDF가 없습니다. 초안을 다시 생성하세요.')
                 return self.reply(200,pdf.read_bytes(),'application/pdf')
-            if path.path=='/api/preview':return self.reply(200,preview(q.get('id',[''])[0]).read_bytes(),'image/svg+xml')
+            if path.path=='/api/preview':return self.reply(200,preview(q.get('id',[''])[0]).read_bytes(),'text/html; charset=utf-8')
             if path.path=='/api/download':
                 p=artifact(q.get('id',[''])[0],q.get('kind',['draft'])[0])
                 return self.reply(200,p.read_bytes(),'application/hwp+zip',{'Content-Disposition':"attachment; filename*=UTF-8''"+quote(p.name)})
@@ -784,6 +806,11 @@ class Handler(BaseHTTPRequestHandler):
                     meta=webdata(data['id']);meta['attachments']=[a for a in meta['attachments'] if a['path']!=data.get('path')];write_web(data['id'],meta)
                     return self.reply(200,{'ok':True})
                 if self.path=='/api/save':return self.reply(200,public(save(data)))
+                if self.path=='/api/verify-native':
+                    s=session(data.get('id',''))
+                    measured=assess_report(artifact(s['id']),s['fields'],native=True)
+                    meta=webdata(s['id']);meta['native_assessment']=measured;write_web(s['id'],meta)
+                    return self.reply(200,public(s))
                 if self.path=='/api/generate':
                     s=save(data);missing=public(s)['missing']
                     if missing:return self.reply(422,{'error':'필수 항목을 입력해주세요.','missing':missing,'id':s['id']})
@@ -809,7 +836,7 @@ class Handler(BaseHTTPRequestHandler):
                             meta=webdata(s['id']);meta['page_assessment']=measured;meta['auto_fit_attempts']=fitted['attempts'];write_web(s['id'],meta)
                         progress_step(6)
                         if measured['fits'] is None:preview_error=measured['message']
-                        elif not measured['fits']:preview_error='최종 한글 출력의 분량이 초과되었습니다. 내용 확인 후 다시 생성하세요.'
+                        elif not measured['fits']:preview_error='최종 미리보기의 분량이 초과되었습니다. 내용 확인 후 다시 생성하세요.'
                         preview(s['id'])
                     except Exception as e:preview_error=str(e)
                     return self.reply(200,{'session':public(session(s['id'])),'preview_error':preview_error})
@@ -817,7 +844,7 @@ class Handler(BaseHTTPRequestHandler):
                     if data.get('reviewed') is not True:raise ValueError('초안 검토를 확인해주세요.')
                     s=session(data.get('id',''))
                     measured=verified_assessment(s)
-                    if measured['fits'] is not True:raise ValueError(measured['message']+' — 한글 쪽 수 확인 및 목표 분량 충족 후 저장할 수 있습니다.')
+                    if measured['fits'] is not True:raise ValueError(measured['message']+' — 쪽 수 확인 및 목표 분량 충족 후 저장할 수 있습니다.')
                     progress_step(1)
                     if s.get('status')!='finalized':engine('finalize','--session',s['id'])
                     progress_step(2)

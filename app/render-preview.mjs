@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
+const [cli, input, output] = process.argv.slice(2);
+const {renderDocumentToScene, renderSceneToHtml} = await import(pathToFileURL(path.join(path.dirname(cli), 'index.js')).href);
+const {scene, pageSvgs} = await renderDocumentToScene(input, {reflow:true});
+const html=renderSceneToHtml(scene, pageSvgs, {title:'업무보고 미리보기'});
+fs.writeFileSync(output, html.replace('</style>', '@media screen{.kordoc-page{max-width:100%;height:auto!important}.kordoc-page>svg{height:auto}}\n</style>'));
+const last = [...pageSvgs.values()].at(-1) || '';
+const tail = [...last.matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/g)].map(m=>m[1].replace(/<[^>]*>/g,'')).join('').replace(/\s/g,'');
+console.log(JSON.stringify({pages:scene.pages.length, tail_chars:tail.length, revision:'4.25.20-upmu.1'}));

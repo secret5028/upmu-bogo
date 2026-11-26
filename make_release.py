@@ -6,18 +6,20 @@ import zipfile
 ROOT=Path(__file__).resolve().parent
 FILES=['README.md','THIRD_PARTY.md','.gitignore','requirements.txt','package.json','package-lock.json',
        'installer/bootstrap.py','installer/build.py','installer/setup.iss','setup.py','install.ps1','install.cmd','create-shortcut.ps1','make_release.py',
-       'app/server.py','app/corpus.py','app/start.ps1','engine/report_loop.py',
-       'assets/approved.hwpx','defaults/report-header.json','tests/test_pages.py','tests/test_corpus.py','tests/test_distribution.py','tests/test_installer.py']
+       'app/server.py','app/render-preview.mjs','app/corpus.py','app/start.ps1','engine/report_loop.py',
+       'assets/approved.hwpx','defaults/report-header.json','tests/test_preview_flow.py','tests/test_pages.py','tests/test_corpus.py','tests/test_distribution.py','tests/test_installer.py']
 FILES += ['app/static/'+name for name in ['index.html','app.js','style.css','report-icon.svg','report-icon.ico']]
 FILES += ['examples/README.md'] + ['examples/'+stem+ext
           for stem in ['01_회의참석보고','02_현장조사결과보고']
           for ext in ['.hwpx','.txt','.svg','.png']]
 
+FILES += ['vendor/'+name for name in ['README.md','kordoc-4.25.20-upmu.1.tgz','kordoc-4.25.20-upmu.1.patch','local-font.ts','render-dutmal-trial.test.ts']]
+
 def main():
     missing=[name for name in FILES if not (ROOT/name).is_file()]
     if missing:raise SystemExit('Missing source files: '+', '.join(missing))
     out=ROOT/'dist';out.mkdir(exist_ok=True)
-    target=out/'work-report-workspace-0.2.5-source.zip'
+    target=out/'work-report-workspace-0.2.6-source.zip'
     with zipfile.ZipFile(target,'w',compression=zipfile.ZIP_DEFLATED) as z:
         for name in FILES:z.write(ROOT/name,'work-report-workspace/'+name)
     digest=hashlib.sha256(target.read_bytes()).hexdigest()

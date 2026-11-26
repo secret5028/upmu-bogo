@@ -1,4 +1,4 @@
-"""Page goals use Hancom, never SVG estimates. Run --native for local Hancom QA."""
+"""Default page goals use the patched renderer. Run --native for optional Hancom QA."""
 from pathlib import Path
 import sys
 import json
@@ -13,10 +13,10 @@ assert server.clean_fields({'target_pages':'2'})['target_pages']=='2'
 try:server.clean_fields({'target_pages':'3'})
 except ValueError:pass
 else:raise AssertionError('Invalid target accepted')
-with patch.object(server,'hancom_pages',return_value=2):
+with patch.object(server,'kordoc_pages',return_value=2):
     assert server.page_assessment(ROOT/'assets/approved.hwpx','1')['fits'] is False
     assert server.page_assessment(ROOT/'assets/approved.hwpx','2')['fits'] is True
-with patch.object(server,'hancom_pages',side_effect=ValueError('unavailable')):
+with patch.object(server,'kordoc_pages',side_effect=ValueError('unavailable')):
     assert server.page_assessment(ROOT/'assets/approved.hwpx','1')['fits'] is None
 
 original=server.clean_fields({'target_pages':'1','title':'분량 검증','report_date':'2026-11-24','report_body':'□ 개요\n❍ 원문 유지'})
@@ -29,7 +29,7 @@ with patch.object(server,'measure_fields',side_effect=[over,fits]) as measure, p
     assert original['report_body']=='□ 개요\n❍ 원문 유지'
 with patch.object(server,'measure_fields',return_value=over), patch.object(server,'ai_raw',return_value=json.dumps(proposal)):
     assert server.fit_draft({'fields':original})['attempts']==3
-with patch.object(server,'artifact',return_value=ROOT/'assets/approved.hwpx'), patch.object(server,'hancom_pages',return_value=1) as native:
+with patch.object(server,'artifact',return_value=ROOT/'assets/approved.hwpx'), patch.object(server,'kordoc_pages',return_value=1) as native:
     cached=server.page_assessment(ROOT/'assets/approved.hwpx','1')
     with patch.object(server,'webdata',return_value={'page_assessment':cached}):
         assert server.verified_assessment({'id':'test','fields':{'target_pages':'1'}})['fits']
@@ -37,7 +37,7 @@ with patch.object(server,'artifact',return_value=ROOT/'assets/approved.hwpx'), p
         cached['verified_sha256']='changed'
         server.verified_assessment({'id':'test','fields':{'target_pages':'1'}})
         assert native.call_count==2
-print('Page goal, native-only verification, retry limit and original preservation: PASS')
+print('Page goal, renderer verification, retry limit and original preservation: PASS')
 
 if '--native' in sys.argv:
     import tempfile,shutil,subprocess,os
@@ -60,7 +60,7 @@ if '--native' in sys.argv:
             fields=dict(original,report_body='□ 검증개요\n'+'\n'.join(f'❍ (확인사항) {i+1}번 항목의 내용과 조치계획을 확인합니다.' for i in range(n)))
             call('update','--session',sid,'--fields-json',json.dumps(fields,ensure_ascii=False))
             made=call('generate','--session',sid)
-            assessment=server.page_assessment(made['draft'],'1')
+            assessment=server.page_assessment(made['draft'],'1',native=True)
             print(n,assessment,flush=True)
             assert assessment['pages'] is not None
             counts.append(assessment['pages'])
@@ -68,10 +68,10 @@ if '--native' in sys.argv:
     print('Native Hancom short/overflow HWPX verification: PASS')
 
 # Automatic decisions use native pages, and sparse second pages trigger a retry.
-with patch.object(server,'hancom_pages',return_value=1):
+with patch.object(server,'kordoc_pages',return_value=1):
     a=server.page_assessment(ROOT/'assets/approved.hwpx','auto')
     assert a['target']==1 and a['fits'] and a['mode']=='auto'
-with patch.object(server,'hancom_pages',return_value=3):
+with patch.object(server,'kordoc_pages',return_value=3):
     a=server.page_assessment(ROOT/'assets/approved.hwpx','auto')
     assert a['target']==2 and not a['fits']
 automatic=dict(original,target_pages='auto')
@@ -91,22 +91,22 @@ print('Automatic page choice, summary retries, AI failure preservation: PASS')
 
 import tempfile, hashlib
 from unittest.mock import MagicMock
-with tempfile.TemporaryDirectory() as td, patch.object(server,'PROJECT',Path(td)), patch.object(server,'hancom_pages',return_value=2):
-    pdf=Path(td)/'99_시스템/웹미리보기'/(hashlib.sha256((ROOT/'assets/approved.hwpx').read_bytes()).hexdigest()+'.pdf')
-    pdf.parent.mkdir(parents=True);pdf.touch()
-    page=MagicMock();page.extract_text.return_value='짧게 넘친 마지막 항목'
-    with patch('pypdf.PdfReader') as reader:
-        reader.return_value.pages=[page,page]
-        result=server.page_assessment(ROOT/'assets/approved.hwpx','auto')
-        assert result['target']==1 and not result['fits']
-        page.extract_text.return_value='상세 일정 및 역할 분담 '*60
-        result=server.page_assessment(ROOT/'assets/approved.hwpx','auto')
-        assert result['target']==2 and result['fits']
+with patch.object(server,'kordoc_pages',return_value=2), patch.object(server,'kordoc_preview',return_value=(None,{'tail_chars':20})):
+    result=server.page_assessment(ROOT/'assets/approved.hwpx','auto')
+    assert result['target']==1 and not result['fits']
+with patch.object(server,'kordoc_pages',return_value=2), patch.object(server,'kordoc_preview',return_value=(None,{'tail_chars':600})):
+    result=server.page_assessment(ROOT/'assets/approved.hwpx','auto')
+    assert result['target']==2 and result['fits']
+with patch.object(server,'hancom_pages',side_effect=AssertionError('Unexpected Hancom launch')), patch.object(server,'kordoc_pages',return_value=1):
+    assert server.page_assessment(ROOT/'assets/approved.hwpx','auto')['fits']
+with patch.object(server,'hancom_pages',return_value=1) as native:
+    assert server.page_assessment(ROOT/'assets/approved.hwpx','auto',native=True)['basis']=='한글 실제 문서'
+    native.assert_called_once()
 print('Sparse second page versus substantial second page: PASS')
 
 if '--engine' in sys.argv:
     import shutil
-    with tempfile.TemporaryDirectory() as td, patch.object(server,'PROJECT',Path(td)), patch.object(server,'hancom_pages',return_value=1):
+    with tempfile.TemporaryDirectory() as td, patch.object(server,'PROJECT',Path(td)), patch.object(server,'kordoc_pages',return_value=1):
         project=Path(td);system=project/'99_시스템';(system/'scripts').mkdir(parents=True)
         template=project/'50_문서템플릿/업무보고/기본 업무보고.hwpx';template.parent.mkdir(parents=True)
         shutil.copy2(ROOT/'assets/approved.hwpx',template)

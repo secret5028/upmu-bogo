@@ -14,7 +14,7 @@ import urllib.request
 import webbrowser
 
 ROOT=Path(__file__).resolve().parent
-VERSION='0.2.5'
+VERSION='0.2.6'
 PYTHON=ROOT/'runtime/python/python.exe'
 NODE=ROOT/'runtime/node/node.exe'
 NO_WINDOW=getattr(subprocess,'CREATE_NO_WINDOW',0)
@@ -28,7 +28,7 @@ def prepare(data):
     system=data/'99_시스템';web=system/'webapp'
     for d in [web,system/'scripts',data/'50_문서템플릿/업무보고',data/'60_작성중',data/'70_완성문서',data/'자료/기존 업무보고',data/'자료/웹업로드']:
         d.mkdir(parents=True,exist_ok=True)
-    for name in ['server.py','corpus.py']:shutil.copy2(ROOT/'app'/name,web/name)
+    for name in ['server.py','corpus.py','render-preview.mjs']:shutil.copy2(ROOT/'app'/name,web/name)
     shutil.copytree(ROOT/'app/static',web/'static',dirs_exist_ok=True)
     shutil.copy2(ROOT/'engine/report_loop.py',system/'scripts/report_loop.py')
     template=data/'50_문서템플릿/업무보고/기본 업무보고.hwpx'

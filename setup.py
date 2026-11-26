@@ -16,7 +16,7 @@ def configure(data,python,node):
     system=data/'99_시스템';web=system/'webapp'
     for folder in [web,system/'scripts',data/'50_문서템플릿/업무보고',data/'60_작성중',data/'70_완성문서',data/'자료/기존 업무보고',data/'자료/웹업로드']:
         folder.mkdir(parents=True,exist_ok=True)
-    for name in ['server.py','corpus.py','start.ps1']:shutil.copy2(ROOT/'app'/name,web/name)
+    for name in ['server.py','corpus.py','start.ps1','render-preview.mjs']:shutil.copy2(ROOT/'app'/name,web/name)
     shutil.copytree(ROOT/'app/static',web/'static',dirs_exist_ok=True)
     shutil.copy2(ROOT/'engine/report_loop.py',system/'scripts/report_loop.py')
     template=data/'50_문서템플릿/업무보고/기본 업무보고.hwpx'
